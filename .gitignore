@@ -1,0 +1,34 @@
+# R session files
+.Rhistory
+.RData
+.Rprofile
+.Rproj.user/
+.Ruserdata
+
+# renv (keep lockfile, ignore library)
+renv/library/
+renv/staging/
+
+# OS
+.DS_Store
+
+# Logs
+error logs/
+*.log
+
+# rsconnect deployment files
+rsconnect/
+
+# Large data files (omics)
+*.raw
+*.mzML
+*.mzXML
+*.sqlite
+*.rds
+*.Rds
+data/
+data-raw/
+
+# Temporary files
+~$*
+*.tmp
