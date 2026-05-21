@@ -1,5 +1,7 @@
-# gct_export_module.R
-# GCT v1.2 export (collapse to unique genes from multiple logFC_ or t_ columns)
+# ─────────────────────────────────────────────────────────
+# OmicsVisor - GCT Export Module
+# Author: Oliver Popp
+# ─────────────────────────────────────────────────────────
 
 `%||%` <- function(a, b) if (is.null(a) || length(a) == 0 || !isTRUE(nzchar(a))) b else a
 

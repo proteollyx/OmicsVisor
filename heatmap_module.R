@@ -1,10 +1,12 @@
-# heatmap_module.R
+# ─────────────────────────────────────────────────────────
+# OmicsVisor - Heatmap Module
+# Author: Oliver Popp
+# ─────────────────────────────────────────────────────────
 
 
 heatmap_ui <- function(id) {
   ns <- NS(id)
   tagList(
-    fluidPage(
       h3("Heatmap Module"),
       p("The Heatmap module allows users to visualise a selected list of IDs and plot intensity values across chosen columns. 
          You can paste a comma-separated list of IDs into ‘Manually select IDs,’ then choose intensity columns from the 
@@ -31,12 +33,9 @@ heatmap_ui <- function(id) {
         column(2, actionButton(ns("deselect_all_intensity"), "Deselect All"))
       ),
       
-      selectInput(ns("rowname_column"), "Select Row Name Column:", choices = NULL),
-      
-      # NEW: multi-select for combining multiple columns as row labels
-      selectInput(ns("row_label_columns"), 
-                  "Select Label Columns for Row Names:", 
-                  choices = NULL, 
+      selectInput(ns("row_label_columns"),
+                  "Select Label Columns for Row Names:",
+                  choices  = NULL,
                   multiple = TRUE),
       
       h4("Select Components for Grouping Annotation (order of clicking matters)"),
@@ -46,7 +45,19 @@ heatmap_ui <- function(id) {
       checkboxInput(ns("cluster_columns"), "Cluster Columns", value = TRUE),
       checkboxInput(ns("cluster_rows"), "Cluster Rows", value = TRUE),
       checkboxInput(ns("scale_rows"), "Scale by Row (Z-score)", value = FALSE),
-      
+
+      hr(),
+      h4("Color Scale"),
+      checkboxInput(ns("use_custom_limits"), "Set custom color limits", value = FALSE),
+      conditionalPanel(
+        condition = sprintf("input['%s']", ns("use_custom_limits")),
+        fluidRow(
+          column(6, numericInput(ns("color_min"), "Min:", value = -1, step = 0.1)),
+          column(6, numericInput(ns("color_max"), "Max:", value =  1, step = 0.1))
+        ),
+        helpText("Values outside this range are shown at the extreme colors. Pairs well with z-score scaling, e.g. -1 to +1.")
+      ),
+
       downloadButton(ns("download_data"), "Download Data"),
       
       numericInput(ns("pdf_width"), "PDF Width", value = 8, min = 4),
@@ -56,25 +67,21 @@ heatmap_ui <- function(id) {
       downloadButton(ns("download_pdf"), "Download Heatmap as PDF"),
       
       plotOutput(ns("heatmap_plot"), height = "700px", width = "100%")
-    )
   )
 }
 
-heatmap_server <- function(input, output, session, data) {
+heatmap_server <- function(id, data) {
+  moduleServer(id, function(input, output, session) {
   ns <- session$ns
   
   # Track order in which grouping components are selected (for columns)
   component_order <- reactiveVal(character(0))
   
-  # Populate intensity and rowname selectInputs
   observe({
     updateSelectInput(session, "intensity_columns",
                       choices = data()$intensity_cols)
-    updateSelectInput(session, "rowname_column",
+    updateSelectInput(session, "row_label_columns",
                       choices = names(data()$data))
-    # NEW:
-    all_cols <- names(data()$data)  # or a subset
-    updateSelectInput(session, "row_label_columns", choices = all_cols)
   })
   
   # Select All / Deselect All
@@ -141,6 +148,21 @@ heatmap_server <- function(input, output, session, data) {
     apply(selected_mat, 1, function(row) paste(row, collapse = "_"))
   })
   
+  color_breaks <- reactive({
+    if (isTRUE(input$use_custom_limits)) {
+      validate(need(isTRUE(input$color_min < input$color_max),
+                    "Color scale: Min must be less than Max."))
+      seq(input$color_min, input$color_max, length.out = 101)
+    } else if (isTRUE(input$scale_rows)) {
+      mat     <- final_heatmap_data()$matrix
+      max_abs <- max(abs(mat), na.rm = TRUE)
+      if (max_abs == 0) return(NULL)
+      seq(-max_abs, max_abs, length.out = 101)
+    } else {
+      NULL
+    }
+  })
+
   output$group_annotation_preview <- renderText({
     annot <- group_annotations()
     if (!is.null(annot)) {
@@ -163,62 +185,74 @@ heatmap_server <- function(input, output, session, data) {
     }
     
     # NEW: Set row names
-    # Create a new combined label by pasting across the selected columns
-    # NEW: Set row names
     if (length(input$row_label_columns) > 0) {
-      # Multi-column approach: combine the selected columns
       df$.combinedLabel <- apply(df[, input$row_label_columns, drop = FALSE], 1, paste, collapse = "_")
-      
-      # Check for duplicates
-      if (anyDuplicated(df$.combinedLabel) > 0) {
-        showNotification("Some row labels are duplicated!", type = "error")
-      }
+      if (anyDuplicated(df$.combinedLabel) > 0)
+        showNotification("Some row labels are duplicated!", type = "warning")
       rownames(df) <- df$.combinedLabel
-      
+    } else if ("id" %in% names(df)) {
+      rownames(df) <- df$id
     } else {
-      # Fallback: use the selected rowname column
-      rownames(df) <- df[[input$rowname_column]]
+      rownames(df) <- seq_len(nrow(df))
     }
-    ## end NEW
     
     
     # Subset columns
     mat <- as.matrix(df[, input$intensity_columns, drop = FALSE])
-    
+
+    # Warn the user if the matrix contains missing values
+    n_na <- sum(is.na(mat))
+    if (n_na > 0) {
+      pct <- round(100 * n_na / length(mat), 1)
+      showNotification(
+        paste0(n_na, " missing value(s) detected (", pct, "% of the matrix). ",
+               "Missing cells appear grey. Clustering may be unavailable — ",
+               "uncheck clustering or switch to imputed intensities."),
+        type = "warning", duration = 10
+      )
+    }
+
     # Scale rows if needed
     if (input$scale_rows) {
       mat <- t(scale(t(mat), center = TRUE, scale = TRUE))
     }
-    
-    # We'll store row_dend & col_dend
+
     col_dend <- NULL
     row_dend <- NULL
-    
-    # Column clustering or grouping
+
+    # Column clustering — graceful fallback if dist() fails due to missing values
     if (input$cluster_columns) {
-      # Create column dendrogram but don't reorder now
-      col_dend <- hclust(dist(t(mat)))
+      col_dend <- tryCatch(
+        hclust(dist(t(mat))),
+        error = function(e) {
+          showNotification(
+            paste0("Column clustering failed (", conditionMessage(e), "). ",
+                   "Clustering skipped — uncheck 'Cluster Columns' or use imputed intensities."),
+            type = "warning", duration = 10
+          )
+          NULL
+        }
+      )
     } else {
-      # No clustering => alphabetical grouping by group_annotations
       col_groups <- group_annotations()
       if (!is.null(col_groups)) {
-        new_col_order <- order(col_groups)
-        mat <- mat[, new_col_order, drop = FALSE]
+        mat <- mat[, order(col_groups), drop = FALSE]
       }
     }
-    
-    # Row clustering or no row clustering
+
+    # Row clustering — graceful fallback if dist() fails due to missing values
     if (input$cluster_rows) {
-      # Create row dendrogram
-      row_dend <- hclust(dist(mat))
-      # (Do not reorder mat here; let pheatmap do it if we pass row_dend.)
-    } else {
-      # If you do NOT want row grouping logic, just do nothing
-      # mat remains as is
-      #
-      # Alternatively, if you want row grouping, you'd define a separate function
-      # that maps rownames(mat) -> group labels, then reorder. But presumably your
-      # group_annotations() are for columns, so let's skip that.
+      row_dend <- tryCatch(
+        hclust(dist(mat)),
+        error = function(e) {
+          showNotification(
+            paste0("Row clustering failed (", conditionMessage(e), "). ",
+                   "Clustering skipped — uncheck 'Cluster Rows' or use imputed intensities."),
+            type = "warning", duration = 10
+          )
+          NULL
+        }
+      )
     }
     
     list(
@@ -255,12 +289,7 @@ heatmap_server <- function(input, output, session, data) {
     
     # Prepare color scale
     colour_palette <- colorRampPalette(c("darkblue", "white", "firebrick"))(100)
-    if (input$scale_rows) {
-      max_abs_value <- max(abs(data_matrix), na.rm = TRUE)
-      breaks <- seq(-max_abs_value, max_abs_value, length.out = 101)
-    } else {
-      breaks <- NULL
-    }
+    breaks <- color_breaks()
     
     # pass row_dend and col_dend to pheatmap
     # pheatmap reorders rows/cols + draws dendrograms
@@ -329,12 +358,7 @@ heatmap_server <- function(input, output, session, data) {
       
       # color palette
       colour_palette <- colorRampPalette(c("darkblue", "white", "firebrick"))(100)
-      if (input$scale_rows) {
-        max_abs_value <- max(abs(mat), na.rm = TRUE)
-        breaks <- seq(-max_abs_value, max_abs_value, length.out = 101)
-      } else {
-        breaks <- NULL
-      }
+      breaks <- color_breaks()
       
       pheatmap::pheatmap(
         mat,
@@ -351,4 +375,5 @@ heatmap_server <- function(input, output, session, data) {
       dev.off()
     }
   )
+  })
 }

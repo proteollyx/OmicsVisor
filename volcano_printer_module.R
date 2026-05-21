@@ -1,10 +1,10 @@
-# volcano_printer_module.R
-
-# UI function for Volcano Printer
+# ─────────────────────────────────────────────────────────
+# OmicsVisor - Volcano Printer Module
+# Author: Oliver Popp
+# ─────────────────────────────────────────────────────────
 volcano_printer_ui <- function(id) {
   ns <- NS(id)
   tagList(
-    fluidPage(
       h3("Volcano Printer Module"),
       p("The Volcano Printer module extends the functionality of the Volcano Plot module, enabling PDF export of publication-quality volcano plots."),
       p("Like the Volcano Plot module, the Volcano Printer automatically pairs selected `logFC` columns with their `Adj.P-value` columns. Set `Adj.P-value cutoff` and `logFC cutoff` values as desired. Data is in log2 space, so an absolute log2 fold change of 1 represents a two-fold linear change."),
@@ -16,9 +16,10 @@ volcano_printer_ui <- function(id) {
       # uiOutput(ns("adjP_column_ui")),  # UI for automatically selected adj.P column
       
       # Single drop-down for comparison
-      selectInput(ns("comparison_name"), "Select Comparison:", choices = NULL),
+      selectizeInput(ns("comparison_name"), "Select Comparison:", choices = NULL,
+                     width = "100%", options = list(dropdownParent = "body")),
       
-      numericInput(ns("pval_cutoff"), "P-value cutoff:", 0.05, min = 0, max = 1),
+      numericInput(ns("pval_cutoff"), "P-value cutoff:", 0.05, min = 0, max = 1, step = 0.01),
       numericInput(ns("logfc_cutoff"), "logFC cutoff:", 1, min = 0),
       
       # Label columns + optional labeling of significant
@@ -30,13 +31,12 @@ volcano_printer_ui <- function(id) {
       numericInput(ns("plot_width"), "Plot Width (inches)", value = 8, min = 4),
       numericInput(ns("plot_height"), "Plot Height (inches)", value = 6, min = 4),
       downloadButton(ns("download_plot"), "Download Volcano Plot"),
-      plotOutput(ns("volcano_ggplot"))
-    )
+      plotOutput(ns("volcano_ggplot"), height = "600px")
   )
 }
 
-# Server function for Volcano Printer
-volcano_printer_server <- function(input, output, session, data) {
+volcano_printer_server <- function(id, data) {
+  moduleServer(id, function(input, output, session) {
   ns <- session$ns
   
   # 1) Observe the data to detect all possible comparisons
@@ -120,7 +120,7 @@ volcano_printer_server <- function(input, output, session, data) {
     df <- plot_data()
     cols <- chosen_cols()
     req(cols$logFC, cols$adjP)
-    
+
     ggplot(df, aes(x = .data[[cols$logFC]], y = -log10(.data[[cols$adjP]]))) +
       geom_point(aes(color = significant), size = 2) +
       scale_color_manual(values = c("grey", "#F85414"), labels = c("Non-Significant", "Significant")) +
@@ -135,10 +135,12 @@ volcano_printer_server <- function(input, output, session, data) {
         max.overlaps = Inf,
         size = 2.3
       ) +
-      # Add cutoffs
       geom_hline(yintercept = -log10(input$pval_cutoff), linetype = "dashed", color = "blue") +
       geom_vline(xintercept = c(-input$logfc_cutoff, input$logfc_cutoff), linetype = "dashed", color = "blue")
-  })
+  # Fixed pixel dimensions so R never queries the browser for device size.
+  # The browser-reported width can be 0 when the tab is not yet active,
+  # which triggers "invalid quartz() device size" on macOS.
+  }, width = 800, height = 600)
   
   # 6) Download Handler for PDF
   output$download_plot <- downloadHandler(
@@ -174,4 +176,5 @@ volcano_printer_server <- function(input, output, session, data) {
       )
     }
   )
+  })
 }

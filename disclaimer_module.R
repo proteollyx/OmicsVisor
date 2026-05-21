@@ -1,10 +1,10 @@
-# disclaimer_module.R
-
-# UI function for Disclaimer
+# ─────────────────────────────────────────────────────────
+# OmicsVisor - Disclaimer Module
+# Author: Oliver Popp
+# ─────────────────────────────────────────────────────────
 disclaimer_ui <- function(id) {
   ns <- NS(id)
   tagList(
-    fluidPage(
       titlePanel("Disclaimer"),
       
       h3("Disclaimer"),
@@ -30,9 +30,9 @@ disclaimer_ui <- function(id) {
       p("4. **Tool Updates**: OmicsVisor is in beta phase and may be updated frequently. Users are advised to keep informed about updates or changes that could impact output and functionality."),
       
       p("5. **Usage Rights**: Users should ensure they have appropriate rights to any data they upload and should avoid uploading any sensitive, confidential, or personally identifiable information.")
-    )
   )
 }
 
-# Server function for Disclaimer
-disclaimer_server <- function(input, output, session) {}
+disclaimer_server <- function(id) {
+  moduleServer(id, function(input, output, session) {})
+}

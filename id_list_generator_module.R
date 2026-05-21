@@ -1,9 +1,11 @@
-# id_list_generator_module.R
+# ─────────────────────────────────────────────────────────
+# OmicsVisor - ID List Generator Module
+# Author: Oliver Popp
+# ─────────────────────────────────────────────────────────
 
 id_list_generator_ui <- function(id) {
   ns <- NS(id)
   tagList(
-    fluidPage(
       titlePanel("ID List Generator"),
       
       h3("ID List Generator Module"),
@@ -22,7 +24,8 @@ id_list_generator_ui <- function(id) {
                selectInput(ns("search_column"), "Select Column to Search:", choices = NULL, width = "100%")
         ),
         column(6,
-               checkboxInput(ns("remove_na"), "Remove NA values", value = FALSE)
+               checkboxInput(ns("remove_na"), "Remove NA values", value = FALSE),
+               checkboxInput(ns("ignore_case"), "Ignore case", value = FALSE)
         )
       ),
       fluidRow(
@@ -56,12 +59,12 @@ id_list_generator_ui <- function(id) {
       ),
       hr(),
       verbatimTextOutput(ns("geneset_preview"))
-    )
   )
 }
 
 
-id_list_generator_server <- function(input, output, session, data) {
+id_list_generator_server <- function(id, data) {
+  moduleServer(id, function(input, output, session) {
   ns <- session$ns
   
   # Reactive to hold the uploaded gene sets
@@ -90,7 +93,10 @@ id_list_generator_server <- function(input, output, session, data) {
   
   # Other parts (search_column, matched_ids, output$id_output, etc.) remain unchanged
   observe({
-    updateSelectInput(session, "search_column", choices = names(data()$data))
+    col_names <- names(data()$data)
+    genes_col <- col_names[grepl("^genes$", col_names, ignore.case = TRUE)][1]
+    default   <- if (!is.na(genes_col)) genes_col else col_names[1]
+    updateSelectInput(session, "search_column", choices = col_names, selected = default)
   })
   
   matched_ids <- reactive({
@@ -101,7 +107,7 @@ id_list_generator_server <- function(input, output, session, data) {
     
     selected_column <- data()$data[[input$search_column]]
     id_column <- data()$data$id
-    indices <- find_genes(gene_list, selected_column)
+    indices <- find_genes(gene_list, selected_column, ignore.case = input$ignore_case)
     matching_ids <- id_column[unlist(indices)]
     
     if (input$remove_na) matching_ids <- na.omit(matching_ids)
@@ -117,5 +123,6 @@ id_list_generator_server <- function(input, output, session, data) {
   observeEvent(input$copy_ids, {
     ids_text <- paste(matched_ids(), collapse = ", ")
     session$sendCustomMessage("copyToClipboard", ids_text)
+  })
   })
 }

@@ -32,3 +32,11 @@ data-raw/
 # Temporary files
 ~$*
 *.tmp
+
+# Posit Connect / shinyapps.io deployment manifest (auto-generated)
+manifest.json
+.positai
+
+# Internal planning docs
+v1.0_roadmap.md
+v1.0_roadmap.html

@@ -1,7 +1,7 @@
-# one_d_enrichment_module.R
-# OmicsVisor module: 1D enrichment
-# Author: Oliver + ChatGPT
-# Date: 2025-08-28
+# ─────────────────────────────────────────────────────────
+# OmicsVisor - 1D Enrichment Module
+# Author: Oliver Popp
+# ─────────────────────────────────────────────────────────
 
 # =========================
 # =======  UI  ============ 
@@ -190,63 +190,6 @@ mod_pathway_1D_server <- function(id) {
       }
     }
     
-    # Strict GCT v1.2 reader (rejects v1.3)
-    # read_gct <- function(path) {
-    #   con <- file(path, open = "r")
-    #   on.exit(close(con), add = TRUE)
-    #   
-    #   # 1) Version header must be exactly "#1.2"
-    #   header <- readLines(con, n = 1L, warn = FALSE)
-    #   if (!length(header)) stop("Empty GCT file.", call. = FALSE)
-    #   header <- sub("^\ufeff", "", header)      # strip UTF-8 BOM if present
-    #   header <- trimws(header)
-    #   if (header != "#1.2") {
-    #     stop(sprintf(
-    #       "Unsupported GCT version header '%s'. This reader only accepts #1.2.\nIf your file is #1.3, export/savedown to 1.2.",
-    #       header
-    #     ), call. = FALSE)
-    #   }
-    #   
-    #   # 2) Dimensions line: nrows \t ncols
-    #   dims <- scan(con, what = character(), nlines = 1L, quiet = TRUE)
-    #   if (length(dims) < 2L) stop("Malformed GCT 1.2 dimension line.", call. = FALSE)
-    #   nrow <- as.integer(dims[1]); ncol <- as.integer(dims[2])
-    #   if (is.na(nrow) || is.na(ncol) || nrow < 1 || ncol < 1) {
-    #     stop("Invalid nrow/ncol in GCT 1.2 header.", call. = FALSE)
-    #   }
-    #   
-    #   # 3) Column header: Name \t Description \t <colnames...>
-    #   hdr <- readLines(con, n = 1L, warn = FALSE)
-    #   cols <- strsplit(hdr, "\t", fixed = TRUE)[[1]]
-    #   if (length(cols) != (2L + ncol)) {
-    #     stop("Column count mismatch vs GCT 1.2 header.", call. = FALSE)
-    #   }
-    #   colnames_data <- cols[-(1:2)]
-    #   
-    #   # 4) Body: nrow rows, first 2 cols are row id + description, rest are numeric data
-    #   tab <- read.delim(
-    #     con, header = FALSE, stringsAsFactors = FALSE,
-    #     quote = "", comment.char = "", nrows = nrow
-    #   )
-    #   if (ncol(tab) != (2L + ncol)) {
-    #     stop("Data column count mismatch in GCT 1.2 body.", call. = FALSE)
-    #   }
-    #   
-    #   row_ids  <- tab[[1]]
-    #   row_desc <- tab[[2]]
-    #   mat <- as.matrix(tab[, -(1:2), drop = FALSE])
-    #   storage.mode(mat) <- "numeric"
-    #   
-    #   rownames(mat) <- row_ids
-    #   colnames(mat) <- colnames_data
-    #   
-    #   list(
-    #     data     = mat,
-    #     row_meta = data.frame(id = row_ids, desc = row_desc, stringsAsFactors = FALSE),
-    #     col_meta = NULL
-    #   )
-    # }
-    
     # ---- Core stats ----
     one_d_enrichment <- function(x, sets, alternative = "two.sided", min_set_size = 5L, max_set_size = Inf, adjust.method = "BH") {
       stopifnot(is.numeric(x), !is.null(names(x)))
@@ -294,14 +237,6 @@ mod_pathway_1D_server <- function(id) {
       gsub("_", " ", x)
     }
     
-    # order_df <- function(df, mode = c("abs", "signed")) {
-    #   mode <- match.arg(mode)
-    #   if (mode == "abs") {
-    #     df[order(-abs(df$rank_biserial), -df$rank_biserial, df$padj), , drop = FALSE]
-    #   } else {
-    #     df[order(-df$rank_biserial, df$padj), , drop = FALSE] }
-    # }
-    # better for deterministic tie breaking: 
     order_df <- function(df, mode = c("abs","signed")) {
       mode <- match.arg(mode)
       df$.ord_id <- seq_len(nrow(df))
@@ -402,16 +337,6 @@ mod_pathway_1D_server <- function(id) {
       df
     })
     
-    # observeEvent(df_bubble(), { # just for checking correct ordering
-    #   df <- df_bubble()
-    #   if (!is.null(df) && nrow(df) > 0) {
-    #     message("[1DE] Bubble head (set, rank_biserial, padj):")
-    #     print(df[, c("set","rank_biserial","padj")][seq_len(min(10, nrow(df))), ])
-    #   } else {
-    #     message("[1DE] Bubble is empty.")
-    #   }
-    # }, ignoreInit = FALSE)
-    
     df_topsets <- reactive({
       .ensure_pkg("ggplot2")
       .ensure_pkg("stringr")
@@ -427,17 +352,6 @@ mod_pathway_1D_server <- function(id) {
       df$set_clean <- factor(df$set_clean, levels = rev(df$set_clean))
       df
     })
-    
-    # observeEvent(df_topsets(), { # just for checking correct ordering
-    #   df <- df_topsets()
-    #   if (!is.null(df) && nrow(df) > 0) {
-    #     message("[1DE] TopSets head (set, rank_biserial, padj):")
-    #     print(df[, c("set","rank_biserial","padj")][seq_len(min(10, nrow(df))), ])
-    #   } else {
-    #     message("[1DE] TopSets is empty.")
-    #   }
-    # }, ignoreInit = FALSE)
-    
     
     # Top sets plot
     output$plt <- renderPlot({

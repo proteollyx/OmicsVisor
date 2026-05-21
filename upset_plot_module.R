@@ -1,11 +1,11 @@
-# upset_plot_module.R
-# UpSet plots with global cutoffs for all logFC_ (and matching adj.P.Val_) columns
-# ID column is assumed to be the first column in the data frame and unique.
+# ─────────────────────────────────────────────────────────
+# OmicsVisor - UpSet Plot Module
+# Author: Oliver Popp
+# ─────────────────────────────────────────────────────────
 
 upset_plot_ui <- function(id) {
   ns <- NS(id)
   tagList(
-    fluidPage(
       h3("UpSet Plot"),
       p("Create UpSet plots of overlapping 'hit' sets defined by global cutoffs on all logFC_ (and matching adj.P.Val_) columns."),
       p("Each logFC_ column defines one set; hits are called using the global cutoffs and direction."),
@@ -76,12 +76,11 @@ upset_plot_ui <- function(id) {
           DT::dataTableOutput(ns("membership_table"))
         )
       )
-    )
   )
 }
 
-upset_plot_server <- function(input, output, session, data) {
-  ns <- session$ns
+upset_plot_server <- function(id, data) {
+  moduleServer(id, function(input, output, session) {
   
   # --- Data access ----------------------------------------------------------
   req_data <- reactive({
@@ -340,4 +339,5 @@ upset_plot_server <- function(input, output, session, data) {
       utils::write.csv(mem, file, row.names = FALSE)
     }
   )
+  })
 }

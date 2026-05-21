@@ -1,10 +1,10 @@
-# documentation_module.R
-
-# UI function for Documentation
+# ─────────────────────────────────────────────────────────
+# OmicsVisor - Documentation Module
+# Author: Oliver Popp
+# ─────────────────────────────────────────────────────────
 documentation_ui <- function(id) {
   ns <- NS(id)
   tagList(
-    fluidPage(
       titlePanel("Documentation"),
       
       h2("OmicsVisor Tool Overview"),
@@ -149,9 +149,9 @@ documentation_ui <- function(id) {
       h3("OmicsVisor Assistant"),
       p("For additional guidance on OmicsVisor usage, interpretation of results or troubleshooting, you can also consult the OmicsVisor Assistant: ",
         tags$a(href = "https://chatgpt.com/g/g-W6cUieQY1-omicsvisor-assistant", "OmicsVisor Assistant"), ".")
-    )
   )
 }
 
-# Server function for Documentation
-documentation_server <- function(input, output, session) {}
+documentation_server <- function(id) {
+  moduleServer(id, function(input, output, session) {})
+}

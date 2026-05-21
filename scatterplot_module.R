@@ -1,9 +1,11 @@
-# scatterplot_module.R
+# ─────────────────────────────────────────────────────────
+# OmicsVisor - logFC Scatter Plot Module
+# Author: Oliver Popp
+# ─────────────────────────────────────────────────────────
 
 scatterplot_ui <- function(id) {
   ns <- NS(id)
   tagList(
-    fluidPage(
       h3("Scatterplot Module"),
       p("This module creates a scatterplot comparing two selected logFC columns. Points can be highlighted based on significance in either or both experiments, and user-specified IDs can be labeled."),
       
@@ -20,7 +22,7 @@ scatterplot_ui <- function(id) {
       
       # Cutoffs
       fluidRow(
-        column(6, numericInput(ns("pval_cutoff"), "Adj. P-value cutoff:", value = 0.05, min = 0, max = 1)),
+        column(6, numericInput(ns("pval_cutoff"), "Adj. P-value cutoff:", value = 0.05, min = 0, max = 1, step = 0.01)),
         column(6, numericInput(ns("logfc_cutoff"), "logFC cutoff:", value = 1, min = 0))
       ),
       
@@ -44,12 +46,11 @@ scatterplot_ui <- function(id) {
       checkboxInput(ns("lock_aspect"), "Fix aspect ratio (1:1)", value = FALSE)
       
       # plotOutput(ns("scatter_plot"), height = "600px", width = "100%")
-    )
   )
 }
 
-scatterplot_server <- function(input, output, session, data) {
-  ns <- session$ns
+scatterplot_server <- function(id, data) {
+  moduleServer(id, function(input, output, session) {
   
   # Populate logFC selection inputs
   observe({
@@ -165,4 +166,5 @@ scatterplot_server <- function(input, output, session, data) {
       dev.off()
     }
   )
+  })
 }

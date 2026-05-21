@@ -1,10 +1,10 @@
-# pca_module.R
-
-# UI function for PCA / UMAP module
+# ─────────────────────────────────────────────────────────
+# OmicsVisor - PCA / UMAP Module
+# Author: Oliver Popp
+# ─────────────────────────────────────────────────────────
 pca_ui <- function(id) {
   ns <- NS(id)
   tagList(
-    fluidPage(
       h3("Dimension Reduction (PCA / UMAP)"),
       p("This module performs dimension reduction (PCA or UMAP) on selected intensity columns, similar to the Heatmap module."),
       p("Use ‘Intensity Column Regex’ in the sidebar to filter which columns appear under ‘Select Intensity Columns.’ 
@@ -119,12 +119,11 @@ pca_ui <- function(id) {
       ),
       
       plotOutput(ns("pca_plot"))  # still called pca_plot for backward compatibility
-    )
   )
 }
 
-# Server function for PCA / UMAP
-pca_server <- function(input, output, session, data) {
+pca_server <- function(id, data) {
+  moduleServer(id, function(input, output, session) {
   ns <- session$ns
   
   # ---- Update intensity columns from main data reactive ----
@@ -197,52 +196,64 @@ pca_server <- function(input, output, session, data) {
   
   # ---- Base data for DR: filter rows and select intensities ----
   dr_data <- reactive({
-    message("[PCA module] dr_data() triggered")
     req(input$row_selection, input$intensity_columns)
     df <- data()$data
-    message("[PCA module] nrow(df)=", nrow(df), " ncol(df)=", ncol(df))
-    
+
     # Filter rows by selected IDs (if requested)
     if (input$row_selection == "selected" && nzchar(input$id_selection)) {
-      selected_ids <- strsplit(input$id_selection, ",")[[1]]
-      selected_ids <- trimws(selected_ids)
-      if ("id" %in% colnames(df)) {
-        df <- df[df$id %in% selected_ids, , drop = FALSE]
-      } else {
-        # validate("No 'id' column found in the data to filter by selected IDs.")
-        stop("[PCA module] 'id' column not found while row_selection == 'selected'")
-      }
+      selected_ids <- trimws(strsplit(input$id_selection, ",")[[1]])
+      validate(need("id" %in% colnames(df),
+                    "No 'id' column found; cannot filter by selected IDs."))
+      df <- df[df$id %in% selected_ids, , drop = FALSE]
     }
-    
-    # Select only chosen intensity columns
+
+    # Select only chosen intensity columns and coerce to numeric
     df <- df[, input$intensity_columns, drop = FALSE]
-    
-    # Ensure numeric
     df <- as.data.frame(lapply(df, function(x) as.numeric(as.character(x))))
-    rownames(df) <- if (!is.null(rownames(df))) rownames(df) else seq_len(nrow(df))
-    message("[PCA module] After filtering: nrow=", nrow(df), " ncol=", ncol(df))
-    
+    rownames(df) <- seq_len(nrow(df))
+
+    # Drop features (rows) with any missing value; PCA/UMAP require a complete matrix
+    n_before <- nrow(df)
+    df <- df[complete.cases(df), , drop = FALSE]
+    n_dropped <- n_before - nrow(df)
+    if (n_dropped > 0) {
+      showNotification(
+        paste0(n_dropped, " feature(s) with missing values excluded from ",
+               "dimension reduction (", nrow(df), " of ", n_before, " retained). ",
+               "Consider using imputed intensities for a complete matrix."),
+        type = "message", duration = 8
+      )
+    }
+
+    validate(
+      need(nrow(df) >= 3,
+           paste0("Too few complete features for dimension reduction (",
+                  nrow(df), " remain after removing features with missing values). ",
+                  "Try selecting more samples or switch to imputed intensities."))
+    )
+
     df
   })
   
   # ---- PCA results ----
   pca_results <- reactive({
-    message("[PCA module] pca_results() triggered")
     req(input$dr_method == "PCA")
     df <- dr_data()
-    
-    # Remove columns that are completely NA or not finite
+
+    # Drop samples (columns) that are entirely non-finite (belt-and-suspenders)
     keep_cols <- vapply(df, function(x) any(is.finite(x)), logical(1))
     df <- df[, keep_cols, drop = FALSE]
-    
-    message("[PCA module] PCA matrix dim: ", paste(dim(df), collapse=" x "))
-    
     validate(
-      need(ncol(df) > 1, "Need at least two samples (columns) with finite values for PCA.")
+      need(ncol(df) > 1, "Need at least two samples with finite values for PCA.")
     )
-    
-    # prcomp expects variables in columns, samples in rows → we transpose
-    pca <- prcomp(t(df), scale. = input$pca_scale, center = input$pca_center)
+
+    # prcomp expects variables in columns, samples in rows → transpose
+    pca <- tryCatch(
+      prcomp(t(df), scale. = input$pca_scale, center = input$pca_center),
+      error = function(e) {
+        validate(need(FALSE, paste0("PCA failed: ", conditionMessage(e))))
+      }
+    )
     
     pca_df <- as.data.frame(pca$x)
     pca_df$Sample <- rownames(pca_df)
@@ -256,7 +267,10 @@ pca_server <- function(input, output, session, data) {
       pca_df$Group <- pca_df$Sample
     }
     
-    list(pca = pca, df = pca_df)
+    var_explained <- round(100 * pca$sdev^2 / sum(pca$sdev^2), 1)
+    names(var_explained) <- colnames(pca$x)
+
+    list(pca = pca, df = pca_df, var_explained = var_explained)
   })
   
   # Update PCA axis choices when PCA has been (re)computed
@@ -285,31 +299,32 @@ pca_server <- function(input, output, session, data) {
     df <- df[, keep_cols, drop = FALSE]
     
     validate(
-      need(ncol(df) > 1, "Need at least two samples (columns) with finite values for UMAP.")
+      need(ncol(df) > 1, "Need at least two samples with finite values for UMAP.")
     )
-    
-    validate(
-      need(ncol(df) > 1, "Need at least two samples (columns) for UMAP.")
-    )
-    
+
     mat <- t(as.matrix(df))  # samples in rows
-    
+
     n_neighbors  <- input$umap_n_neighbors
     min_dist     <- input$umap_min_dist
     n_components <- input$umap_n_components
-    
+
     validate(
       need(n_neighbors < nrow(mat),
            "n_neighbors must be smaller than the number of samples.")
     )
-    
+
     # Configure UMAP via umap.defaults
     config <- umap::umap.defaults
     config$n_neighbors  <- n_neighbors
     config$min_dist     <- min_dist
     config$n_components <- n_components
-    
-    umap_res <- umap::umap(mat, config = config)
+
+    umap_res <- tryCatch(
+      umap::umap(mat, config = config),
+      error = function(e) {
+        validate(need(FALSE, paste0("UMAP failed: ", conditionMessage(e))))
+      }
+    )
     
     layout <- umap_res$layout
     umap_df <- as.data.frame(layout)
@@ -383,12 +398,16 @@ pca_server <- function(input, output, session, data) {
         need(y_pc %in% names(pca_df), "Selected Y-axis PC not available.")
       )
       
+      var <- res$var_explained
+      x_label <- sprintf("%s (%.1f%%)", x_pc, var[x_pc])
+      y_label <- sprintf("%s (%.1f%%)", y_pc, var[y_pc])
+
       ggplot(pca_df, aes_string(x = x_pc, y = y_pc, color = "Group", label = "Sample")) +
         geom_point(size = input$point_size) +
         ggrepel::geom_text_repel(size = input$label_size) +
         labs(
-          x = x_pc,
-          y = y_pc,
+          x = x_label,
+          y = y_label,
           title = sprintf("PCA Plot (%s vs %s)", x_pc, y_pc)
         ) +
         theme_minimal() +
@@ -462,4 +481,5 @@ pca_server <- function(input, output, session, data) {
       utils::write.csv(df, file, row.names = FALSE)
     }
   )
+  })
 }

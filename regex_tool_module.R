@@ -1,11 +1,11 @@
-# regex_tool_module.R
-
-# UI function for Regex Tool
+# ─────────────────────────────────────────────────────────
+# OmicsVisor - Regex Tool Module
+# Author: Oliver Popp
+# ─────────────────────────────────────────────────────────
 regex_tool_ui <- function(id) {
   ns <- NS(id)
   
   tagList(
-    fluidPage(
       h3("Regex Tool Module"),
       p("The Regex Tool converts a list of comma-separated IDs to gene names for use in tools like Metascape. The module works independently of the loaded data frame and can make the output unique by removing redundant entries."),
       fluidRow(
@@ -30,13 +30,11 @@ regex_tool_ui <- function(id) {
                checkboxInput(ns("unique_output"), "Make Unique", value = FALSE)
         )
       )
-    )
   )
 }
 
-# Server function for Regex Tool
-regex_tool_server <- function(input, output, session) {
-  ns <- session$ns
+regex_tool_server <- function(id) {
+  moduleServer(id, function(input, output, session) {
   
   # Reactive expression to process the input text
   processed_text <- reactive({
@@ -64,5 +62,6 @@ regex_tool_server <- function(input, output, session) {
   observeEvent(input$copy_button, {
     # Copy processed text to clipboard
     session$sendCustomMessage("copyToClipboard", processed_text())
+  })
   })
 }
