@@ -73,7 +73,21 @@ upset_plot_ui <- function(id) {
           plotOutput(ns("upset_plot"), height = "600px"),
           br(),
           h4("Set Membership Preview"),
-          DT::dataTableOutput(ns("membership_table"))
+          DT::dataTableOutput(ns("membership_table")),
+
+          hr(),
+          h4("Extract IDs by Intersection"),
+          p("Select an intersection combination to view and copy its IDs."),
+          uiOutput(ns("intersection_select_ui")),
+          fluidRow(
+            column(9, verbatimTextOutput(ns("intersection_ids_text"))),
+            column(3,
+              tags$br(),
+              verbatimTextOutput(ns("intersection_n_text")),
+              actionButton(ns("copy_intersection"), "Copy IDs",
+                           icon = icon("copy"), class = "btn-sm w-100 mt-1")
+            )
+          )
         )
       )
   )
@@ -81,7 +95,8 @@ upset_plot_ui <- function(id) {
 
 upset_plot_server <- function(id, data) {
   moduleServer(id, function(input, output, session) {
-  
+  ns <- session$ns
+
   # --- Data access ----------------------------------------------------------
   req_data <- reactive({
     d <- data()
@@ -274,7 +289,7 @@ upset_plot_server <- function(id, data) {
         order.by    = "freq"
       )
     )
-  })
+  }, width = 800, height = 600)
   
   # --- Membership table -----------------------------------------------------
   output$membership_table <- DT::renderDataTable({
@@ -339,5 +354,85 @@ upset_plot_server <- function(id, data) {
       utils::write.csv(mem, file, row.names = FALSE)
     }
   )
+
+  # --- Intersection ID extractor --------------------------------------------
+  # IMPORTANT: must use the same build_upset_from_df call as the plot so that
+  # (a) sets filtered out by min_set_size are absent from both the plot AND the
+  #     dropdown, and (b) IDs re-classified by that removal get the same label
+  #     in both places.  Using membership_data() (which hardcodes min_set_size=1)
+  #     causes both the group labels and the counts to diverge from the plot.
+  # The dropdown is also capped at n_intersects so it shows exactly the same
+  # bars that are visible in the UpSet plot.
+  intersection_groups <- reactive({
+    df  <- req_data()
+    res <- build_upset_from_df(
+      df           = df,
+      direction    = input$direction,
+      logfc_cut    = input$logfc_cutoff,
+      adjp_cut     = input$adjp_cutoff,
+      min_set_size = input$min_set_size,
+      n_intersects = input$n_intersects
+    )
+    validate(need(res$ok, res$reason %||% "Unable to build intersection groups."))
+
+    mem       <- res$membership
+    set_cols  <- grep("^logFC_", names(mem), value = TRUE)
+    # Only the columns that survived the min_set_size filter exist in upset_input
+    live_cols <- intersect(set_cols, colnames(res$upset_input))
+    id_col    <- setdiff(names(mem), set_cols)[1]
+
+    # Drop IDs that belong only to sets that were removed by min_set_size
+    in_any <- rowSums(mem[, live_cols, drop = FALSE]) > 0L
+    mem     <- mem[in_any, , drop = FALSE]
+    validate(need(nrow(mem) > 0L, "No IDs pass the current filters."))
+
+    # Build signature groups using only the surviving sets
+    sigs <- apply(mem[, live_cols, drop = FALSE], 1L, function(row) {
+      active <- live_cols[as.logical(row)]
+      paste(sub("^logFC_", "", active), collapse = " & ")
+    })
+    grps <- split(mem[[id_col]], sigs)
+    grps <- grps[lengths(grps) > 0L]
+    grps <- grps[order(-lengths(grps))]   # descending frequency — matches order.by="freq"
+
+    # Cap at n_intersects so the dropdown lists exactly the bars shown in the plot
+    n_inter <- max(1L, as.integer(input$n_intersects %||% 40L))
+    if (length(grps) > n_inter) grps <- grps[seq_len(n_inter)]
+
+    grps
+  })
+
+  output$intersection_select_ui <- renderUI({
+    grps    <- intersection_groups()
+    choices <- setNames(
+      names(grps),
+      paste0(names(grps), "  (n = ", lengths(grps), ")")
+    )
+    selectizeInput(
+      ns("selected_intersection"),
+      label   = NULL,
+      choices = choices,
+      width   = "100%",
+      options = list(dropdownParent = "body")
+    )
+  })
+
+  output$intersection_ids_text <- renderText({
+    req(input$selected_intersection)
+    ids <- intersection_groups()[[input$selected_intersection]]
+    if (length(ids) == 0) return("No IDs.")
+    paste(ids, collapse = ", ")
+  })
+
+  output$intersection_n_text <- renderText({
+    req(input$selected_intersection)
+    paste("Count:", length(intersection_groups()[[input$selected_intersection]]))
+  })
+
+  observeEvent(input$copy_intersection, {
+    req(input$selected_intersection)
+    ids <- intersection_groups()[[input$selected_intersection]]
+    session$sendCustomMessage("copyToClipboard", paste(ids, collapse = ", "))
+  })
   })
 }

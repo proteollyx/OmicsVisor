@@ -43,8 +43,8 @@ pca_ui <- function(id) {
         multiple = TRUE
       ),
       fluidRow(
-        column(2, actionButton(ns("select_all_intensity"), "Select All")),
-        column(2, actionButton(ns("deselect_all_intensity"), "Deselect All"))
+        column(2, actionButton(ns("select_all_intensity"),   "Select All",   class = "btn-sm")),
+        column(2, actionButton(ns("deselect_all_intensity"), "Deselect All", class = "btn-sm"))
       ),
       
       # ---- Grouping annotation controls ----
@@ -118,7 +118,28 @@ pca_ui <- function(id) {
         column(4, downloadButton(ns("download_coords"), "Download Coordinates (CSV)"))
       ),
       
-      plotOutput(ns("pca_plot"))  # still called pca_plot for backward compatibility
+      fluidRow(
+        column(12, plotOutput(ns("pca_plot"), height = "600px"))
+      ),
+
+      conditionalPanel(
+        condition = sprintf("input['%s'] == 'PCA'", ns("dr_method")),
+        hr(),
+        h4("Scree Plot"),
+        fluidRow(
+          column(12, plotOutput(ns("scree_plot"), height = "300px"))
+        ),
+        hr(),
+        h4("PC Loadings"),
+        p("Features ranked by absolute loading for the selected principal components.
+           The table shows the union of the top N features from each selected PC.
+           Click a column header to re-sort."),
+        fluidRow(
+          column(4, numericInput(ns("loadings_top_n"), "Top N features per PC:", value = 20, min = 1, step = 1)),
+          column(4, tags$br(), downloadButton(ns("download_loadings"), "Download Full Loadings (CSV)", class = "btn-sm"))
+        ),
+        DT::dataTableOutput(ns("loadings_table"))
+      )
   )
 }
 
@@ -454,7 +475,7 @@ pca_server <- function(id, data) {
   output$pca_plot <- renderPlot({
     p <- create_dr_plot()
     print(p)
-  })
+  }, width = 800, height = 600)
   
   # ---- Download handler: plot as PDF ----
   output$download_pdf <- downloadHandler(
@@ -480,6 +501,88 @@ pca_server <- function(id, data) {
       df <- coords_table()
       utils::write.csv(df, file, row.names = FALSE)
     }
+  )
+
+  # ---- Scree plot ----
+  output$scree_plot <- renderPlot({
+    req(input$dr_method == "PCA")
+    res <- pca_results()
+    var <- res$var_explained
+    df  <- data.frame(
+      PC      = factor(names(var), levels = names(var)),
+      Variance = var
+    )
+    ggplot(df, aes(x = PC, y = Variance)) +
+      geom_col(fill = "steelblue", width = 0.7) +
+      geom_line(aes(group = 1), color = "firebrick", linewidth = 0.8) +
+      geom_point(color = "firebrick", size = 2) +
+      labs(
+        title = "Scree Plot",
+        x     = "Principal Component",
+        y     = "Variance Explained (%)"
+      ) +
+      theme_minimal(base_size = 13) +
+      theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  }, width = 800, height = 300)
+
+  # ---- Feature IDs for PCA loadings ----
+  # Mirrors the row-filtering and complete.cases logic in dr_data() so that
+  # the i-th element maps to the i-th row of pca$rotation.
+  feature_ids <- reactive({
+    req(input$row_selection, input$intensity_columns)
+    df_full <- data()$data
+
+    if (input$row_selection == "selected" && nzchar(input$id_selection)) {
+      selected_ids <- trimws(strsplit(input$id_selection, ",")[[1]])
+      if ("id" %in% colnames(df_full))
+        df_full <- df_full[df_full$id %in% selected_ids, , drop = FALSE]
+    }
+
+    df_int <- df_full[, input$intensity_columns, drop = FALSE]
+    df_int <- as.data.frame(lapply(df_int, function(x) as.numeric(as.character(x))))
+    complete_idx <- complete.cases(df_int)
+
+    if ("id" %in% colnames(df_full)) df_full$id[complete_idx]
+    else as.character(seq_len(sum(complete_idx)))
+  })
+
+  # ---- Full loadings matrix (features × all PCs) ----
+  loadings_data <- reactive({
+    req(input$dr_method == "PCA")
+    res <- pca_results()
+    ids <- feature_ids()
+    rot <- as.data.frame(res$pca$rotation)
+    rot <- cbind(Feature = ids, rot)
+    rot
+  })
+
+  # ---- Loadings table: top N from each selected PC ----
+  output$loadings_table <- DT::renderDataTable({
+    req(input$pca_x_pc, input$pca_y_pc)
+    ldf  <- loadings_data()
+    x_pc <- input$pca_x_pc
+    y_pc <- input$pca_y_pc
+    n    <- max(1L, as.integer(input$loadings_top_n %||% 20L))
+
+    top_x <- order(-abs(ldf[[x_pc]]))[seq_len(min(n, nrow(ldf)))]
+    top_y <- order(-abs(ldf[[y_pc]]))[seq_len(min(n, nrow(ldf)))]
+    keep  <- unique(c(top_x, top_y))
+
+    display_df <- ldf[keep, c("Feature", x_pc, y_pc), drop = FALSE]
+    display_df <- display_df[order(-abs(display_df[[x_pc]])), ]
+
+    DT::datatable(
+      display_df,
+      options  = list(pageLength = 25, scrollX = TRUE),
+      rownames = FALSE
+    ) |>
+      DT::formatRound(columns = c(x_pc, y_pc), digits = 4)
+  })
+
+  # ---- Download full loadings ----
+  output$download_loadings <- downloadHandler(
+    filename = function() paste0("pca_loadings_", Sys.Date(), ".csv"),
+    content  = function(file) utils::write.csv(loadings_data(), file, row.names = FALSE)
   )
   })
 }

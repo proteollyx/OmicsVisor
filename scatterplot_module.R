@@ -37,7 +37,7 @@ scatterplot_ui <- function(id) {
         column(6, numericInput(ns("plot_height"), "Plot Height (inches):", value = 6))
       ),
       
-      downloadButton(ns("download_plot"), "Download Scatterplot as PDF"),
+      downloadButton(ns("download_plot"), "Download Scatterplot as PDF", class = "btn-sm"),
       
       fluidRow(
         column(12, plotOutput(ns("scatter_plot"), height = "600px", width = "100%"))
@@ -152,7 +152,7 @@ scatterplot_server <- function(id, data) {
   output$scatter_plot <- renderPlot({
     df <- scatter_data()
     plot_scatter(df, input)
-  })
+  }, width = 800, height = 600)
   
   output$download_plot <- downloadHandler(
     filename = function() {

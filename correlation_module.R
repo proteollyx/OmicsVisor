@@ -32,8 +32,8 @@ correlation_ui <- function(id) {
           selectInput(ns("intensity_columns"), "Select columns:",
                       choices = NULL, multiple = TRUE),
           fluidRow(
-            column(6, actionButton(ns("select_all"),   "Select All")),
-            column(6, actionButton(ns("deselect_all"), "Deselect All"))
+            column(6, actionButton(ns("select_all"),   "Select All",   class = "btn-sm")),
+            column(6, actionButton(ns("deselect_all"), "Deselect All", class = "btn-sm"))
           ),
 
           hr(),
@@ -255,12 +255,12 @@ correlation_server <- function(id, data) {
 
     output$corr_plot <- renderPlot({
       make_plot()
-    })
+    }, width = 800, height = 600)
 
     # ── Results table ──────────────────────────────────────────────────────────
     output$results_table <- DT::renderDataTable({
       res <- corr_results()
-      tbl <- res$results[!res$results$is_reference, ]
+      tbl <- res$results
       tbl$is_reference <- NULL
 
       DT::datatable(
@@ -269,7 +269,12 @@ correlation_server <- function(id, data) {
         options  = list(pageLength = 25, scrollX = TRUE,
                         lengthMenu = c(10, 25, 50, 100))
       ) |>
-        DT::formatRound(columns = c("r", "p.value", "adj.p.value"), digits = 4)
+        DT::formatRound(columns = c("r", "p.value", "adj.p.value"), digits = 4) |>
+        DT::formatStyle(
+          "rank",
+          target          = "row",
+          backgroundColor = DT::styleEqual(1, "#fff3cd")
+        )
     })
 
     # ── Downloads ──────────────────────────────────────────────────────────────

@@ -143,6 +143,13 @@ ui <- page_sidebar(
         text-align: center;
       }
 
+      /* ── Action buttons: prevent flex-stretch to full width ── */
+      .action-button,
+      .shiny-download-link {
+        width: auto;
+        align-self: flex-start;
+      }
+
     "))
   ),
 

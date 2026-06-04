@@ -26,11 +26,10 @@ heatmap_ui <- function(id) {
       
       textInput(ns("id_selection"), "Manually select IDs (comma-separated):", ""),
       
-      tags$style(HTML(".selectize-input { width: 400px !important; }")),
       selectInput(ns("intensity_columns"), "Select Intensity Columns:", choices = NULL, multiple = TRUE),
       fluidRow(
-        column(2, actionButton(ns("select_all_intensity"), "Select All")),
-        column(2, actionButton(ns("deselect_all_intensity"), "Deselect All"))
+        column(2, actionButton(ns("select_all_intensity"), "Select All", class = "btn-sm")),
+        column(2, actionButton(ns("deselect_all_intensity"), "Deselect All", class = "btn-sm"))
       ),
       
       selectInput(ns("row_label_columns"),
@@ -58,13 +57,13 @@ heatmap_ui <- function(id) {
         helpText("Values outside this range are shown at the extreme colors. Pairs well with z-score scaling, e.g. -1 to +1.")
       ),
 
-      downloadButton(ns("download_data"), "Download Data"),
-      
+      downloadButton(ns("download_data"), "Download Data", class = "btn-sm"),
+
       numericInput(ns("pdf_width"), "PDF Width", value = 8, min = 4),
       numericInput(ns("pdf_height"), "PDF Height", value = 6, min = 4),
       numericInput(ns("fontsize_row"), "Font Size Row", value = 8, min = 6),
       numericInput(ns("fontsize_col"), "Font Size Column", value = 8, min = 6),
-      downloadButton(ns("download_pdf"), "Download Heatmap as PDF"),
+      downloadButton(ns("download_pdf"), "Download Heatmap as PDF", class = "btn-sm"),
       
       plotOutput(ns("heatmap_plot"), height = "700px", width = "100%")
   )
@@ -73,7 +72,7 @@ heatmap_ui <- function(id) {
 heatmap_server <- function(id, data) {
   moduleServer(id, function(input, output, session) {
   ns <- session$ns
-  
+
   # Track order in which grouping components are selected (for columns)
   component_order <- reactiveVal(character(0))
   
@@ -174,7 +173,7 @@ heatmap_server <- function(id, data) {
   
   # Reactive that returns: the final matrix, plus row/col dendrograms if used
   final_heatmap_data <- reactive({
-    req(input$intensity_columns, input$rowname_column)
+    req(input$intensity_columns)
     df <- data()$data
     
     # Filter rows by ID
@@ -262,51 +261,70 @@ heatmap_server <- function(id, data) {
     )
   })
   
-  # Render the heatmap
+  # ── Render the heatmap ────────────────────────────────────────────────────
+  # width/height/res are fixed so Shiny always opens a valid-size PNG device
+  # regardless of whether the tab is visible — this prevents the macOS
+  # "invalid quartz() device size" error that occurs when the browser reports
+  # 0 px dimensions before the panel has fully painted.
   output$heatmap_plot <- renderPlot({
-    hm_data <- final_heatmap_data()
-    data_matrix <- hm_data$matrix
+    hm_data  <- final_heatmap_data()
+    mat      <- hm_data$matrix
     col_dend <- hm_data$col_dend
     row_dend <- hm_data$row_dend
-    
-    # Build a column annotation data.frame if group_annotations exist
-    # We'll match them to the current colnames
+
+    # Guard against degenerate matrices before touching the graphics device
+    validate(
+      need(nrow(mat) > 0,     "No rows to display. Check your ID filter."),
+      need(ncol(mat) > 0,     "No intensity columns selected."),
+      need(!all(is.na(mat)),  "All selected values are NA — nothing to plot.")
+    )
+
     col_annot <- NULL
-    ga <- group_annotations()  # for columns
+    ga <- group_annotations()
     if (!is.null(ga)) {
-      # ga is the group label for each column *in the original order*
-      original_cols <- input$intensity_columns
-      names(ga) <- original_cols
-      
-      # Now match to the current colnames of data_matrix
-      # (If cluster_columns=TRUE, data_matrix is still in the original col order,
-      #  pheatmap will reorder it. If cluster_columns=FALSE, we've already changed data_matrix,
-      #  so colnames differ from the original. This matching step ensures alignment.)
-      matched_groups <- ga[colnames(data_matrix)]
+      names(ga) <- input$intensity_columns
+      matched_groups <- ga[colnames(mat)]
       col_annot <- data.frame(Group = matched_groups, check.names = FALSE)
-      rownames(col_annot) <- colnames(data_matrix)
+      rownames(col_annot) <- colnames(mat)
     }
-    
-    # Prepare color scale
+
     colour_palette <- colorRampPalette(c("darkblue", "white", "firebrick"))(100)
     breaks <- color_breaks()
-    
-    # pass row_dend and col_dend to pheatmap
-    # pheatmap reorders rows/cols + draws dendrograms
-    
-    pheatmap::pheatmap(
-      data_matrix,
-      cluster_rows = if (!is.null(row_dend)) row_dend else FALSE,
-      cluster_cols = if (!is.null(col_dend)) col_dend else FALSE,
-      scale = "none",
-      color = colour_palette,
-      breaks = breaks,
-      fontsize_row = input$fontsize_row,
-      fontsize_col = input$fontsize_col,
-      annotation_col = col_annot
-    )
-  })
-  
+
+    # Clamp font sizes: values outside [4, 20] can produce negative pheatmap
+    # layout dimensions which trigger a second class of device-size errors.
+    fontsize_row <- max(4L, min(as.integer(input$fontsize_row), 20L))
+    fontsize_col <- max(4L, min(as.integer(input$fontsize_col), 20L))
+
+    tryCatch({
+      p <- pheatmap::pheatmap(
+        mat,
+        cluster_rows   = if (!is.null(row_dend)) row_dend else FALSE,
+        cluster_cols   = if (!is.null(col_dend)) col_dend else FALSE,
+        scale          = "none",
+        color          = colour_palette,
+        breaks         = breaks,
+        fontsize_row   = fontsize_row,
+        fontsize_col   = fontsize_col,
+        annotation_col = col_annot,
+        silent         = TRUE   # build gtable without drawing; we draw below
+      )
+      grid::grid.newpage()
+      grid::grid.draw(p$gtable)
+    }, error = function(e) {
+      showNotification(
+        paste0("Heatmap rendering failed: ", conditionMessage(e)),
+        type = "error", duration = 10
+      )
+      # Draw an informative error panel so the output area is not just blank
+      grid::grid.newpage()
+      grid::grid.text(
+        paste0("Cannot render heatmap:\n", conditionMessage(e)),
+        gp = grid::gpar(col = "firebrick", fontsize = 13)
+      )
+    })
+  }, width = 800, height = 700, res = 96)
+
   # Download data => reorder row/col by dendrogram if used
   output$download_data <- downloadHandler(
     filename = function() {

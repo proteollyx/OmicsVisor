@@ -42,8 +42,8 @@ plot_ui <- function(id) {
     ),
 
     fluidRow(
-      column(2, actionButton(ns("select_all_intensity"),   "Select All")),
-      column(2, actionButton(ns("deselect_all_intensity"), "Deselect All"))
+      column(2, actionButton(ns("select_all_intensity"),   "Select All",   class = "btn-sm")),
+      column(2, actionButton(ns("deselect_all_intensity"), "Deselect All", class = "btn-sm"))
     ),
 
     h4("Select Components for Grouping Annotation"),
@@ -77,9 +77,9 @@ plot_ui <- function(id) {
     numericInput(ns("pdf_width"),  "Width (inches)",  value = 8, min = 4),
     numericInput(ns("pdf_height"), "Height (inches)", value = 6, min = 4),
 
-    actionButton(ns("generate_plot"), "Generate Plot"),
-    plotOutput(ns("protein_plot"), height = "600px"),
-    downloadButton(ns("download_plot"), "Download Plot")
+    downloadButton(ns("download_plot"), "Download Plot"),
+    br(),
+    plotOutput(ns("protein_plot"), height = "600px")
   )
 }
 
@@ -223,9 +223,8 @@ plot_server <- function(id, data) {
     })
 
     output$protein_plot <- renderPlot({
-      req(input$generate_plot)
       make_plot()
-    })
+    }, width = 800, height = 600)
 
     output$download_plot <- downloadHandler(
       filename = function() paste0("protein_plot_", format(Sys.time(), "%Y%m%d%H%M%S"), ".pdf"),

@@ -12,7 +12,7 @@ donut_plot_ui <- function(id) {
     fluidRow(
       column(4, numericInput(ns("logfc_cutoff"), "Global logFC Cutoff", value = 1, min = 0)),
       column(4, numericInput(ns("pval_cutoff"), "Global Adj.P-value Cutoff", value = 0.05, min = 0, max = 1, step = 0.01)),
-      column(4, actionButton(ns("apply_cutoff"), "Apply Cutoff"))
+      column(4, actionButton(ns("apply_cutoff"), "Apply Cutoff", class = "btn-sm"))
     ),
     uiOutput(ns("donut_plots_ui")),
     fluidRow(
@@ -20,7 +20,7 @@ donut_plot_ui <- function(id) {
       column(4, verbatimTextOutput(ns("selected_ids_count")))
     ),
     fluidRow(
-      column(12, actionButton(ns("copy_selected_ids"), "Copy IDs", icon = icon("copy")))
+      column(12, actionButton(ns("copy_selected_ids"), "Copy IDs", icon = icon("copy"), class = "btn-sm"))
     )
   )
 }
@@ -58,7 +58,7 @@ donut_plot_server <- function(id, data) {
         plot_title <- gsub("\\.", " ", sub("logFC_", "", logfc_col))
         output[[paste0("donut_plot_", i)]] <- renderPlot({
           donut_plot(all_ids, down_ids, up_ids, plot_title)
-        })
+        }, width = 600, height = 300)
       })
     })
 

@@ -34,7 +34,7 @@ volcano_plot_ui <- function(id) {
       numericInput(ns("pval_cutoff"), "Adj. P-value cutoff:", 0.05, min = 0, max = 1, step = 0.01),
       numericInput(ns("logfc_cutoff"), "logFC cutoff:", 1, min = 0),
       selectInput(ns("label_columns"), "Select Label Columns:", choices = NULL, multiple = TRUE),
-      actionButton(ns("generate_ids"), "Generate IDs for Heatmap Selection"),
+      actionButton(ns("generate_ids"), "Generate IDs for Heatmap Selection", class = "btn-sm"),
 
       h4("Left Side (logFC < 0)"),
       actionButton(ns("copy_neg_btn"), "Copy", icon = icon("copy"), class = "btn-sm"),

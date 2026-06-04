@@ -401,8 +401,8 @@ mod_pathway_1D_server <- function(id) {
                        axis.text.y = element_text(size = input$y_text),
                        legend.title = element_text(size = input$legend_title),
                        legend.text  = element_text(size = input$legend_text))
-    })
-    
+    }, width = 800, height = 600)
+
     # Bubble plot
     output$bubble <- renderPlot({
       .ensure_pkg("ggplot2")
@@ -450,8 +450,8 @@ mod_pathway_1D_server <- function(id) {
                        axis.text.y = element_text(size = input$y_text),
                        legend.title = element_text(size = input$legend_title),
                        legend.text  = element_text(size = input$legend_text))
-    })
-    
+    }, width = 800, height = 600)
+
     # ---- Downloads ----
     output$dl_results <- downloadHandler(
       filename = function() sprintf("1d_enrichment_%s.tsv", format(Sys.time(), "%Y%m%d_%H%M%S")),
