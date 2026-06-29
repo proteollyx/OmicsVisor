@@ -6,6 +6,8 @@ donut_plot_ui <- function(id) {
   ns <- NS(id)
   tagList(
     h3("Donut Plot Module"),
+    p(em("Finding commonly up/down-regulated candidates across comparisons."),
+      style = "color: #666; margin-top: -6px; font-size: 1.05em;"),
     p("Generates a donut plot for each two-group comparison using user-defined `logFC` and `Adj.P-value` cutoffs. Checkboxes allow you to select up- or downregulated candidates for each comparison and copy them to your clipboard. Within each comparison, the logic is OR (includes all selected IDs); across comparisons, the logic is AND (IDs must meet criteria in all selected comparisons), allowing you to identify overlapping candidates."),
     p("Select upregulated and/or downregulated IDs using checkboxes for each comparison. Selecting one checkbox within a comparison will include all IDs meeting that criterion, while selecting both will include all IDs meeting either criterion. Across comparisons, only IDs meeting all selected criteria (AND logic) will be included."),
 

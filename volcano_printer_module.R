@@ -30,6 +30,25 @@ volcano_printer_ui <- function(id) {
       
       numericInput(ns("plot_width"), "Plot Width (inches)", value = 8, min = 4),
       numericInput(ns("plot_height"), "Plot Height (inches)", value = 6, min = 4),
+
+      checkboxInput(ns("manual_axes"), "Manual axis limits", value = FALSE),
+      conditionalPanel(
+        condition = sprintf("input['%s'] === true", ns("manual_axes")),
+        tags$p(
+          tags$strong("Warning:"),
+          " Some data points may fall outside the specified range and will be clipped from the plot. Use with caution.",
+          style = "color: red; font-size: 0.88em;"
+        ),
+        fluidRow(
+          column(6, numericInput(ns("x_min"), "X-axis min", value = -5)),
+          column(6, numericInput(ns("x_max"), "X-axis max", value =  5))
+        ),
+        fluidRow(
+          column(6, numericInput(ns("y_min"), "Y-axis min", value =  0)),
+          column(6, numericInput(ns("y_max"), "Y-axis max", value = 10))
+        )
+      ),
+
       downloadButton(ns("download_plot"), "Download Volcano Plot"),
       plotOutput(ns("volcano_ggplot"), height = "600px")
   )
@@ -121,10 +140,13 @@ volcano_printer_server <- function(id, data) {
     cols <- chosen_cols()
     req(cols$logFC, cols$adjP)
 
-    ggplot(df, aes(x = .data[[cols$logFC]], y = -log10(.data[[cols$adjP]]))) +
+    p <- ggplot(df, aes(x = .data[[cols$logFC]], y = -log10(.data[[cols$adjP]]))) +
       geom_point(aes(color = significant), size = 2) +
       scale_color_manual(values = c("grey", "#F85414"), labels = c("Non-Significant", "Significant")) +
       labs(
+        title    = input$comparison_name,
+        subtitle = sprintf("adj.P ≤ %.2g  |  |logFC| ≥ %.2g",
+                           input$pval_cutoff, input$logfc_cutoff),
         x = paste0(cols$logFC, " (log2 fold change)"),
         y = "-log10(adj.P-value)"
       ) +
@@ -137,6 +159,11 @@ volcano_printer_server <- function(id, data) {
       ) +
       geom_hline(yintercept = -log10(input$pval_cutoff), linetype = "dashed", color = "blue") +
       geom_vline(xintercept = c(-input$logfc_cutoff, input$logfc_cutoff), linetype = "dashed", color = "blue")
+
+    if (isTRUE(input$manual_axes))
+      p <- p + coord_cartesian(xlim = c(input$x_min, input$x_max),
+                               ylim = c(input$y_min, input$y_max))
+    p
   # Fixed pixel dimensions so R never queries the browser for device size.
   # The browser-reported width can be 0 when the tab is not yet active,
   # which triggers "invalid quartz() device size" on macOS.
@@ -145,7 +172,10 @@ volcano_printer_server <- function(id, data) {
   # 6) Download Handler for PDF
   output$download_plot <- downloadHandler(
     filename = function() {
-      paste0("volcano_plot_", Sys.Date(), ".pdf")
+      paste0("volcano_", input$comparison_name,
+             "_adjP", input$pval_cutoff,
+             "_logFC", input$logfc_cutoff,
+             "_", Sys.Date(), ".pdf")
     },
     content = function(file) {
       df <- plot_data()
@@ -156,6 +186,9 @@ volcano_printer_server <- function(id, data) {
         geom_point(aes(color = significant), size = 2) +
         scale_color_manual(values = c("grey", "#F85414"), labels = c("Non-Significant", "Significant")) +
         labs(
+          title    = input$comparison_name,
+          subtitle = sprintf("adj.P ≤ %.2g  |  |logFC| ≥ %.2g",
+                             input$pval_cutoff, input$logfc_cutoff),
           x = paste0(cols$logFC, " (log2 fold change)"),
           y = "-log10(adj.P-value)"
         ) +
@@ -168,7 +201,12 @@ volcano_printer_server <- function(id, data) {
         ) +
         geom_hline(yintercept = -log10(input$pval_cutoff), linetype = "dashed", color = "blue") +
         geom_vline(xintercept = c(-input$logfc_cutoff, input$logfc_cutoff), linetype = "dashed", color = "blue")
-      
+
+      if (isTRUE(input$manual_axes))
+        plot_to_save <- plot_to_save +
+          coord_cartesian(xlim = c(input$x_min, input$x_max),
+                          ylim = c(input$y_min, input$y_max))
+
       # Finally, save
       ggsave(
         filename = file, plot = plot_to_save, device = "pdf",

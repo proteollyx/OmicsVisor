@@ -77,6 +77,20 @@ plot_ui <- function(id) {
     numericInput(ns("pdf_width"),  "Width (inches)",  value = 8, min = 4),
     numericInput(ns("pdf_height"), "Height (inches)", value = 6, min = 4),
 
+    checkboxInput(ns("manual_y"), "Manual Y-axis limits", value = FALSE),
+    conditionalPanel(
+      condition = sprintf("input['%s'] === true", ns("manual_y")),
+      tags$p(
+        tags$strong("Warning:"),
+        " Some data points may fall outside the specified range and will be clipped from the plot. Use with caution.",
+        style = "color: red; font-size: 0.88em;"
+      ),
+      fluidRow(
+        column(6, numericInput(ns("y_min"), "Y-axis min", value = 0)),
+        column(6, numericInput(ns("y_max"), "Y-axis max", value = 30))
+      )
+    ),
+
     downloadButton(ns("download_plot"), "Download Plot"),
     br(),
     plotOutput(ns("protein_plot"), height = "600px")
@@ -218,6 +232,9 @@ plot_server <- function(id, data) {
         base <- base + geom_jitter(width = 0.2, alpha = 0.73, size = 3, shape = 21, col = "black")
       if (isTRUE(input$show_beeswarm))
         base <- base + ggbeeswarm::geom_beeswarm(alpha = 0.73, size = 3, shape = 21, col = "black")
+
+      if (isTRUE(input$manual_y))
+        base <- base + coord_cartesian(ylim = c(input$y_min, input$y_max))
 
       base
     })

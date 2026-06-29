@@ -96,7 +96,8 @@ scatterplot_server <- function(id, data) {
     pearson <- cor(df[[input$x_logfc]], df[[input$y_logfc]], method = "pearson", use = "complete.obs")
     spearman <- cor(df[[input$x_logfc]], df[[input$y_logfc]], method = "spearman", use = "complete.obs")
     
-    subtitle_text <- sprintf("Pearson: %.2f   |   Spearman: %.2f", pearson, spearman)
+    subtitle_text <- sprintf("Pearson: %.2f  |  Spearman: %.2f  |  adj.P ≤ %.2g  |  |logFC| ≥ %.2g",
+                             pearson, spearman, input$pval_cutoff, input$logfc_cutoff)
     
     
     p <- ggplot() +
@@ -156,7 +157,12 @@ scatterplot_server <- function(id, data) {
   
   output$download_plot <- downloadHandler(
     filename = function() {
-      paste0("scatterplot_", Sys.Date(), ".pdf")
+      paste0("scatterplot_",
+             gsub("logFC_", "", input$x_logfc), "_vs_",
+             gsub("logFC_", "", input$y_logfc),
+             "_adjP", input$pval_cutoff,
+             "_logFC", input$logfc_cutoff,
+             "_", Sys.Date(), ".pdf")
     },
     content = function(file) {
       pdf(file, width = input$plot_width, height = input$plot_height)

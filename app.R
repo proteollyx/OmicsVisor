@@ -175,7 +175,13 @@ ui <- page_sidebar(
           options  = list(dropdownParent = "body")
         ),
         textInput("int_regex", "Custom regex:", value = "^Imputed"),
-        helpText("Select a preset or type your own regex.")
+        helpText("Select a preset or type your own regex."),
+        helpText(HTML(
+          "<strong>Examples:</strong><br>",
+          "<code>^Imputed.*(cond1|cond2)</code> &mdash; select specific conditions<br>",
+          "<code>^Imputed.*(cond1|cond2).*24h</code> &mdash; add a timepoint filter<br><br>",
+          "<em>Note:</em> A custom regex typed above overrides the dropdown selection."
+        ))
       ),
 
       card(
@@ -235,6 +241,10 @@ ui <- page_sidebar(
     div(
       "Developed by Oliver Popp – ",
       tags$a(href = "mailto:oliver.popp@mdc-berlin.de", "oliver.popp@mdc-berlin.de")
+    ),
+    div(
+      style = "margin-top: 4px; font-size: 0.85em; color: #aaa;",
+      "Tested with Chrome. Some features may not work correctly in other browsers."
     )
   )
 )
