@@ -38,8 +38,11 @@ donut_plot_server <- function(id, data) {
             logfc_col  <- data()$logFC_cols[i]
             adjp_col   <- gsub("logFC", "adj.P.Val", logfc_col)
             all_ids    <- data()$data$id
-            down_ids   <- all_ids[data()$data[[logfc_col]] < -input$logfc_cutoff & data()$data[[adjp_col]] < input$pval_cutoff]
-            up_ids     <- all_ids[data()$data[[logfc_col]] >  input$logfc_cutoff & data()$data[[adjp_col]] < input$pval_cutoff]
+            lfc        <- data()$data[[logfc_col]]
+            adjp       <- data()$data[[adjp_col]]
+            valid      <- !is.na(lfc) & !is.na(adjp)
+            down_ids   <- all_ids[valid & lfc < -input$logfc_cutoff & adjp < input$pval_cutoff]
+            up_ids     <- all_ids[valid & lfc >  input$logfc_cutoff & adjp < input$pval_cutoff]
             plot_title <- gsub("\\.", " ", sub("logFC_", "", logfc_col))
             tagList(
               plotOutput(ns(paste0("donut_plot_", i)), height = "300px"),
@@ -55,8 +58,11 @@ donut_plot_server <- function(id, data) {
         logfc_col  <- data()$logFC_cols[i]
         adjp_col   <- gsub("logFC", "adj.P.Val", logfc_col)
         all_ids    <- data()$data$id
-        down_ids   <- all_ids[data()$data[[logfc_col]] < -input$logfc_cutoff & data()$data[[adjp_col]] < input$pval_cutoff]
-        up_ids     <- all_ids[data()$data[[logfc_col]] >  input$logfc_cutoff & data()$data[[adjp_col]] < input$pval_cutoff]
+        lfc        <- data()$data[[logfc_col]]
+        adjp       <- data()$data[[adjp_col]]
+        valid      <- !is.na(lfc) & !is.na(adjp)
+        down_ids   <- all_ids[valid & lfc < -input$logfc_cutoff & adjp < input$pval_cutoff]
+        up_ids     <- all_ids[valid & lfc >  input$logfc_cutoff & adjp < input$pval_cutoff]
         plot_title <- gsub("\\.", " ", sub("logFC_", "", logfc_col))
         output[[paste0("donut_plot_", i)]] <- renderPlot({
           donut_plot(all_ids, down_ids, up_ids, plot_title)
@@ -75,11 +81,14 @@ donut_plot_server <- function(id, data) {
         if (isTRUE(input[[paste0("select_up_", i)]]) || isTRUE(input[[paste0("select_down_", i)]])) {
           logfc_col <- data()$logFC_cols[i]
           adjp_col  <- gsub("logFC", "adj.P.Val", logfc_col)
+          lfc       <- data()$data[[logfc_col]]
+          adjp      <- data()$data[[adjp_col]]
+          valid     <- !is.na(lfc) & !is.na(adjp)
           up_ids    <- if (isTRUE(input[[paste0("select_up_", i)]])) {
-            data()$data$id[data()$data[[logfc_col]] >  input$logfc_cutoff & data()$data[[adjp_col]] < input$pval_cutoff]
+            data()$data$id[valid & lfc >  input$logfc_cutoff & adjp < input$pval_cutoff]
           } else character(0)
           down_ids  <- if (isTRUE(input[[paste0("select_down_", i)]])) {
-            data()$data$id[data()$data[[logfc_col]] < -input$logfc_cutoff & data()$data[[adjp_col]] < input$pval_cutoff]
+            data()$data$id[valid & lfc < -input$logfc_cutoff & adjp < input$pval_cutoff]
           } else character(0)
           pair_ids  <- unique(c(up_ids, down_ids))
           result    <- if (is.null(result)) pair_ids else intersect(result, pair_ids)
