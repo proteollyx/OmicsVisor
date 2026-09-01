@@ -1,41 +1,63 @@
 # TODO
 
+Status as of v1.1.0 (2026-09-01). Items closed by that release are marked with
+where they were addressed.
+
 ## Open
 
-- [x] Volcano Printer: does not refresh selected IDs (obsolete — ID selection is manual text input; no auto-refresh needed)
-- [ ] Select only logFC and adjust adj.p-value selection accordingly without letting user change it
-- [ ] Optional blue line and disclaimer that vector graphics can be edited according to needs
-- [ ] Explain what donut plots can be useful for
-- [ ] ID list generator: box size increase (layout issue)
-- [ ] Why does plotly not fix the label? (is this possible?)
-- [ ] Explain on overview how the format of the dataframe should look, with option to display an example
-- [ ] Explain why and how the tool is ID-driven and how the IDs are built
-- [ ] Explain why it only works with this format — not made for PTMs yet
-- [ ] Add a disclaimer why PCAs might not work with non-imputed data / NAs in the matrix
-- [ ] Add histograms for adj.p
-- [ ] Add a short explainer for what the Intensity column regex is for
-- [ ] If no data is loaded, show how a minimum input table should look like
-- [ ] How to cite?
-- [x] Select Row Name Column: removed — replaced by "Select Label Columns for Row Names" multi-select
-- [ ] Login tool for stats
-- [ ] Option to impute for certain plots
-- [ ] EasyPubPlot export functionality
-- [ ] Barplot or crossbar + points?
-- [ ] Implement 1D enrichment finite-value filter: `xi <- xi[is.finite(xi)]` / `xb <- xb[is.finite(xb)]`
+### Documentation (in-app)
+The README now covers most of these; the in-app **Documentation** tab still
+repeats the older text and should be brought in line.
 
-## Planned Features
+- [ ] Show a minimum example input table in-app when no data is loaded
+- [ ] Explain what the Intensity column regex is for, in-app
+- [ ] Explain what donut plots are useful for
+- [ ] Add the "vector graphics can be edited downstream" note next to the PDF
+      export buttons
 
-- [ ] LogFC Scatterplots — QC: All-by-all-correlation, Gingras tSNE map
+### Features
+- [ ] Volcano / Volcano Printer: lock the adj.P selection to the chosen logFC
+      column so it cannot be changed independently
 - [ ] Histograms of adjusted p-values
-- [ ] Protein lists: Crapome, Kinases, Common contaminants
-- [ ] Combine dataframes
+- [ ] Option to impute on the fly for the matrix-based plots
+- [ ] Barplot, or crossbar + points
+- [ ] EasyPubPlot export
+- [ ] Protein lists: Crapome, kinases, common contaminants
+- [ ] Combine data frames from several experiments
+- [ ] QC views: all-by-all logFC correlation, Gingras-style t-SNE map
+- [ ] Login / usage statistics
 
-## Done
+### Known rough edges
+- [ ] ID List Generator: input box is too small (layout)
+- [ ] Plotly point labels do not stay pinned when the plot is re-rendered
+- [ ] PTM data is not first-class: site tables load and the comparison views
+      work, but nothing is PTM-aware (no localisation filter, no protein
+      roll-up)
 
-- [x] Volcano: select only comparison and automatically select logFC and adjP accordingly
-- [x] Same for Volcano Printer Module
-- [x] Copy IDs from left side, right side, or both sides at once
-- [x] Select Label Columns: as in volcano plot module, also for heatmap module
-- [x] Donut: show number of IDs selected with the given cutoffs
-- [x] Boxplot/Violin Plot Module: add the select all columns as well
-- [x] Show jitter or beeswarm (mutually exclusive)
+## Closed in v1.1.0
+
+- [x] How to cite? — `CITATION.cff` plus a Citation section in the README
+- [x] Explain how the input data frame should look — README "Input format",
+      with a minimal worked example table
+- [x] Explain why and how the tool is ID-driven — README intro and input format
+- [x] Explain that the format is not built for PTMs yet — README "Notes and
+      current limitations"
+- [x] Disclaimer about PCA with non-imputed data / NAs — README limitations,
+      and the PCA module already reports how many features it dropped
+- [x] 1D enrichment finite-value filter — `one_d_enrichment()` filters with
+      `x <- x[is.finite(x)]` before splitting into `xi`/`xb`, so both are
+      already finite; covered by a regression test
+
+## Closed earlier
+
+- [x] Volcano: select a comparison and have logFC/adjP follow automatically
+- [x] Same for the Volcano Printer module
+- [x] Copy IDs from the left side, right side, or both at once
+- [x] Select Label Columns for the heatmap, as in the volcano module
+- [x] Donut: show the number of IDs selected at the given cutoffs
+- [x] Boxplot/Violin: select-all columns button
+- [x] Jitter or beeswarm, mutually exclusive
+- [x] Volcano Printer refresh of selected IDs — obsolete; ID selection is a
+      manual text input, so there is nothing to refresh
+- [x] "Select Row Name Column" — replaced by the multi-select
+      "Select Label Columns for Row Names"
