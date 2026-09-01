@@ -68,6 +68,8 @@ jobs:
             any::ggplot2
             any::RColorBrewer
             any::testthat
+            any::withr
+            any::futile.logger
 
       - name: Run test suite
         run: Rscript tests/testthat.R
