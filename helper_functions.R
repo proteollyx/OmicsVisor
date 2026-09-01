@@ -118,10 +118,23 @@ detect_comparisons <- function(col_names) {
 ov_read_upload <- function(path, file_name = path) {
   ext <- tolower(tools::file_ext(file_name))
 
+  # openxlsx warns "No data found on worksheet." and then returns NULL. We turn
+  # that into a clear error below, so muffle the warning rather than show the
+  # user both.
+  read_xlsx_quiet <- function(p) {
+    withCallingHandlers(
+      openxlsx::read.xlsx(p, sheet = 1),
+      warning = function(w) {
+        if (grepl("No data found on worksheet", conditionMessage(w), fixed = TRUE))
+          invokeRestart("muffleWarning")
+      }
+    )
+  }
+
   df <- switch(
     ext,
-    "xlsx" = openxlsx::read.xlsx(path, sheet = 1),
-    "xls"  = openxlsx::read.xlsx(path, sheet = 1),
+    "xlsx" = read_xlsx_quiet(path),
+    "xls"  = read_xlsx_quiet(path),
     "txt"  = ,
     "tsv"  = as.data.frame(data.table::fread(
       path, sep = "\t", quote = "", na.strings = c("", "NA", "NaN"))),
@@ -132,8 +145,18 @@ ov_read_upload <- function(path, file_name = path) {
       ext), call. = FALSE)
   )
 
+  # openxlsx returns NULL for a worksheet with no data; say so plainly rather
+  # than handing back a 0x0 frame for the caller to puzzle over.
+  if (is.null(df))
+    stop("The file contains no data (the first worksheet is empty).", call. = FALSE)
+
   if (is.list(df) && !is.data.frame(df)) df <- as.data.frame(do.call(cbind, df))
-  as.data.frame(df, stringsAsFactors = FALSE)
+  df <- as.data.frame(df, stringsAsFactors = FALSE)
+
+  if (nrow(df) == 0L || ncol(df) == 0L)
+    stop("The file contains no data rows.", call. = FALSE)
+
+  df
 }
 
 #' Classify the columns of a results table.
@@ -159,6 +182,49 @@ ov_detect_columns <- function(df, int_regex = "^Intensity") {
     adjP_cols      = safe_grep("adj\\.?p|fdr|q\\.?val"),
     intensity_cols = safe_grep(int_regex %||% "^Intensity")
   )
+}
+
+#' Column names that plausibly hold sample intensities.
+#'
+#' More than half of real result tables use no `Imputed`/`Intensity` prefix at
+#' all (Perseus and some MaxQuant exports name columns plainly, e.g.
+#' `ctr_PeC_A`), so the default preset matches nothing and the matrix-based
+#' modules silently stay empty. Auto-selecting would be wrong — the same set
+#' also contains `ANOVA.*` and similar derived columns — so this only supplies
+#' examples for the sidebar hint, letting the user write an accurate regex.
+#'
+#' @return character vector of candidate column names, most-likely first
+ov_intensity_candidates <- function(df) {
+  nms <- names(df)
+  if (is.null(nms)) return(character(0))
+
+  numeric_cols <- nms[vapply(df, is.numeric, logical(1))]
+
+  # Exclude identifiers and anything that is clearly a statistic.
+  drop_pat <- paste0(
+    "^(id|Genes?|Protein|Uniprot|Sequence)",           # identifiers
+    "|^(logFC|t|P\\.Value|adj\\.P\\.Val|modF|F)[._]",  # per-comparison stats
+    "|^(ANOVA|Student|Welch|q[._]?val|FDR)",           # other test output
+    "|\\.(pvalue|padj|qvalue)$"
+  )
+  candidates <- numeric_cols[!grepl(drop_pat, numeric_cols, ignore.case = TRUE)]
+  candidates
+}
+
+#' Longest common leading token shared by a set of column names, if any.
+#'
+#' Used to propose a starting regex in the sidebar hint.
+ov_common_prefix <- function(x) {
+  if (length(x) < 2) return("")
+  chars <- strsplit(x, "", fixed = TRUE)
+  n     <- min(lengths(chars))
+  if (n == 0) return("")
+  first <- chars[[1]]
+  k <- 0L
+  for (i in seq_len(n)) {
+    if (all(vapply(chars, function(cc) cc[i] == first[i], logical(1)))) k <- i else break
+  }
+  substr(x[1], 1, k)
 }
 
 #' Stretch a fixed colour vector to cover `n` groups.

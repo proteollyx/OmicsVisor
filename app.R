@@ -175,6 +175,7 @@ ui <- page_sidebar(
           options  = list(dropdownParent = "body")
         ),
         textInput("int_regex", "Custom regex:", value = "^Imputed"),
+        uiOutput("int_regex_feedback"),
         helpText("Select a preset or type your own regex."),
         helpText(HTML(
           "<strong>Examples:</strong><br>",
@@ -316,6 +317,44 @@ server <- function(input, output, session) {
     if (length(sel) > 0) df <- swapFC(df, groups = sel)
 
     c(list(data = df), ov_detect_columns(df, input$int_regex))
+  })
+
+  # Live feedback on the intensity regex. More than half of real result tables
+  # use no Imputed/Intensity prefix, in which case the default preset matches
+  # nothing and the Heatmap, PCA, Boxplot and Correlation tabs stay empty with
+  # no indication why. Show the match count, and when it is zero show real
+  # column names from this file so the user can write a pattern that works.
+  output$int_regex_feedback <- renderUI({
+    req(input$upload_excel)
+    n <- length(data()$intensity_cols)
+
+    if (n > 0)
+      return(div(
+        style = "color:#18682a; font-size:0.85em; margin:-6px 0 6px 0;",
+        sprintf("%d intensity column%s matched.", n, if (n == 1) "" else "s")
+      ))
+
+    cand   <- ov_intensity_candidates(raw_file())
+    prefix <- ov_common_prefix(utils::head(cand, 50))
+
+    div(
+      style = paste("color:#8a4b00; font-size:0.85em; margin:-6px 0 6px 0;",
+                    "border-left:3px solid #f0ad4e; padding-left:8px;"),
+      tags$b("No intensity columns matched."),
+      if (length(cand) == 0) {
+        span(" No numeric sample columns were detected in this file.")
+      } else {
+        tagList(
+          sprintf(" %d numeric column%s look like sample intensities, e.g.:",
+                  length(cand), if (length(cand) == 1) "" else "s"),
+          tags$code(paste(utils::head(cand, 3), collapse = ", ")),
+          if (nzchar(prefix))
+            tagList(" Try ", tags$code(paste0("^", prefix)), ".")
+          else
+            " Type a pattern above that matches them."
+        )
+      }
+    )
   })
 
   output$download_swapped <- downloadHandler(

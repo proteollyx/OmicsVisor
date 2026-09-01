@@ -109,36 +109,55 @@ scatterplot_server <- function(id, data) {
                              pearson, spearman, input$pval_cutoff, input$logfc_cutoff)
     
     
+    # With real data it is common for nothing to clear the cutoffs. A named
+    # scale_color_manual() with no matching levels warns ("No shared levels
+    # found..."), so only add the colour-mapped layers when they have data.
+    has_fg <- nrow(df_fg) > 0
+
     p <- ggplot() +
       # Background: nonsignificant points
       geom_point(data = df_bg, aes(x = .data[[x]], y = .data[[y]]),
-                 color = "darkgrey", size = input$point_size, alpha = 0.5) +
+                 color = "darkgrey", size = input$point_size, alpha = 0.5)
 
-      # Foreground: significant points with colour mapping
-      geom_point(data = df_fg,
-                 aes(x = .data[[x]], y = .data[[y]], color = .data$Significance),
-                 size = input$point_size) +
+    if (has_fg) {
+      p <- p +
+        # Foreground: significant points with colour mapping
+        geom_point(data = df_fg,
+                   aes(x = .data[[x]], y = .data[[y]], color = .data$Significance),
+                   size = input$point_size) +
+        scale_color_manual(values = c(
+          "Exp1" = "#0072B2",  # a deeper, cooler blue
+          "Exp2" = "#E69F00",  # a softer golden-orange
+          "Both" = "#D65DB1"   # a vibrant medium pink
+        ))
+    }
 
-      # Labels for selected points using same colours
-      ggrepel::geom_text_repel(
-        data = label_df,
-        aes(x = .data[[x]], y = .data[[y]],
-            label = .data$Label, color = .data$Significance),
-        size = input$label_size,
-        segment.color = "black",
-        max.overlaps = Inf,
-        # fontface = "bold",
-        show.legend = FALSE  # Hides legend for text labels
-      ) +
+    if (nrow(label_df) > 0) {
+      # Only map colour when the significance scale is actually in play;
+      # otherwise the labels are plain black and no scale is needed.
+      p <- p + if (has_fg) {
+        ggrepel::geom_text_repel(
+          data = label_df,
+          mapping = aes(x = .data[[x]], y = .data[[y]],
+                        label = .data$Label, colour = .data$Significance),
+          size = input$label_size, segment.color = "black",
+          max.overlaps = Inf,
+          show.legend = FALSE  # Hides legend for text labels
+        )
+      } else {
+        ggrepel::geom_text_repel(
+          data = label_df,
+          mapping = aes(x = .data[[x]], y = .data[[y]], label = .data$Label),
+          size = input$label_size, segment.color = "black",
+          max.overlaps = Inf, colour = "black", show.legend = FALSE
+        )
+      }
+    }
+
+    p <- p +
       
       geom_hline(yintercept = 0, linetype = "dashed", color = "steelblue", alpha = 0.3) +
       geom_vline(xintercept = 0, linetype = "dashed", color = "steelblue", alpha = 0.3) +
-      
-      scale_color_manual(values = c(
-        "Exp1" = "#0072B2",  # a deeper, cooler blue
-        "Exp2" = "#E69F00",  # a softer golden-orange
-        "Both" = "#D65DB1"   # a vibrant medium pink
-      )) +
       
       labs(
         title = "logFC Scatterplot",

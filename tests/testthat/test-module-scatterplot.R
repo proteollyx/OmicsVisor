@@ -96,3 +96,27 @@ test_that("scatterplot survives an all-NA comparison column", {
     expect_no_error(scatter_data())
   })
 })
+
+test_that("scatterplot renders cleanly when nothing clears the cutoffs", {
+  # Common on real data. A named scale_color_manual() with no matching levels
+  # warns "No shared levels found between `names(values)` and the data's
+  # colour values", which surfaced on PDF export.
+  d <- sim_omics(n_features = 80)
+  testServer(scatterplot_server, args = list(data = reactive(ov_bundle(d))), {
+    sp_inputs(session, logfc_cutoff = 1000)
+    sd <- scatter_data()
+    expect_true(all(sd$Significance == "None"))
+    expect_no_warning(plot_scatter(sd, input))
+    expect_no_warning(build_gg(plot_scatter(sd, input)))
+  })
+})
+
+test_that("scatterplot labels highlighted IDs even with no significant points", {
+  d <- sim_omics(n_features = 60)
+  picked <- d$id[1:3]
+  testServer(scatterplot_server, args = list(data = reactive(ov_bundle(d))), {
+    sp_inputs(session, logfc_cutoff = 1000, label_all_ids = TRUE,
+              highlight_ids = paste(picked, collapse = ", "))
+    expect_no_warning(build_gg(plot_scatter(scatter_data(), input)))
+  })
+})

@@ -32,6 +32,14 @@ it uncovered across the eighteen modules.
 - `ov_expand_palette()` and `ov_pdf_device()` helpers
 - Warning on upload when the file has no `id` column, explaining that the app
   is ID-driven
+- **Live feedback on the intensity-column regex.** The sidebar now reports how
+  many columns the current pattern matched and, when none did, names real
+  columns from the loaded file and proposes a prefix to try. Across a 29-file
+  sample of real result tables, 15 matched nothing with the default `^Imputed`
+  preset — Perseus and some MaxQuant exports name sample columns plainly
+  (`ctr_PeC_A`) — which left the Heatmap, PCA, Boxplot and Correlation tabs
+  silently empty with no indication why
+- `ov_intensity_candidates()` and `ov_common_prefix()` helpers behind that hint
 
 ### Fixed
 - **`%||%` returned the fallback for any vector of length > 1.** The operator
@@ -83,6 +91,13 @@ it uncovered across the eighteen modules.
   `CHANGELOG.md` at UI-build time with an unguarded relative path.
 - Scatterplot: an all-NA comparison column no longer aborts the plot through
   `cor(use = "complete.obs")`.
+- Scatterplot: when nothing clears the cutoffs — routine on real data — the
+  named colour scale had no matching levels and every render warned "No shared
+  levels found between `names(values)` of the manual scale and the data's
+  colour values". The colour-mapped layers are now added only when they have
+  data.
+- An empty or header-only upload is rejected with a plain explanation instead
+  of a bare `0 x 0` table propagating into every module.
 - Donut Plot: a `logFC_` column with no matching `adj.P.Val_` column is shown
   as all-"Other" rather than as an empty donut.
 
