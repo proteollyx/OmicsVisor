@@ -41,13 +41,24 @@ for (f in c("version.R", "helper_functions.R",
 # ── Result collection ────────────────────────────────────────────────────────
 RESULTS <- new.env(parent = emptyenv())
 RESULTS$rows <- list()
+RESULTS$out  <- Sys.getenv("OV_SMOKE_OUT",
+                           file.path(tempdir(), "ov_smoke_results.tsv"))
 
+# Append every row as it is produced. A long sweep that is interrupted (or
+# killed) then still leaves usable results on disk instead of nothing.
 record <- function(file, module, check, status, detail = "") {
-  RESULTS$rows[[length(RESULTS$rows) + 1L]] <- data.frame(
+  row <- data.frame(
     file = file, module = module, check = check,
-    status = status, detail = substr(detail, 1, 300),
+    status = status, detail = gsub("[\r\n\t]+", " ", substr(detail, 1, 300)),
     stringsAsFactors = FALSE
   )
+  RESULTS$rows[[length(RESULTS$rows) + 1L]] <- row
+  utils::write.table(row, RESULTS$out, sep = "\t", row.names = FALSE,
+                     col.names = !file.exists(RESULTS$out), append = TRUE,
+                     quote = FALSE)
+  if (status == "ERROR")
+    message("  ERROR  ", module, " / ", check, " :: ", substr(detail, 1, 160))
+  invisible(NULL)
 }
 
 # Run `expr`; classify as OK / VALIDATE (a deliberate validate()/req() stop) /
@@ -319,6 +330,15 @@ files <- unlist(lapply(args, function(a) {
 files <- files[file.exists(files) & !grepl("^~\\$", basename(files))]
 if (length(files) == 0) stop("No QQ_Results*.xlsx files found.", call. = FALSE)
 
+if (file.exists(RESULTS$out)) unlink(RESULTS$out)
+
+# Optional: cap the run, e.g. OV_SMOKE_LIMIT=25
+lim <- suppressWarnings(as.integer(Sys.getenv("OV_SMOKE_LIMIT", "")))
+if (!is.na(lim) && lim > 0 && lim < length(files)) {
+  set.seed(1)
+  files <- files[sort(sample(length(files), lim))]
+}
+
 message(sprintf("Exercising %d file(s)\n", length(files)))
 for (f in files) {
   tryCatch(exercise_file(f),
@@ -326,9 +346,8 @@ for (f in files) {
              record(basename(f), "HARNESS", "run", "ERROR", conditionMessage(e)))
 }
 
-out <- do.call(rbind, RESULTS$rows)
-outfile <- Sys.getenv("OV_SMOKE_OUT", file.path(tempdir(), "ov_smoke_results.tsv"))
-utils::write.table(out, outfile, sep = "\t", row.names = FALSE, quote = FALSE)
+out     <- do.call(rbind, RESULTS$rows)
+outfile <- RESULTS$out
 
 cat("\n\n================ SUMMARY ================\n")
 print(table(out$status))
