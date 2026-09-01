@@ -3,6 +3,21 @@
 # Author: Oliver Popp
 # ─────────────────────────────────────────────────────────
 
+# The changelog is read while the UI is being constructed, so an unguarded
+# readLines() on a missing file takes the whole app down at startup rather than
+# just blanking this one panel.
+ov_read_changelog <- function() {
+  path <- "CHANGELOG.md"
+  if (!file.exists(path)) {
+    alt <- file.path(dirname(sys.frame(1)$ofile %||% "."), "CHANGELOG.md")
+    if (file.exists(alt)) path <- alt
+  }
+  if (!file.exists(path))
+    return("Changelog not available in this deployment. See https://github.com/proteollyx/OmicsVisor/blob/main/CHANGELOG.md")
+  tryCatch(paste(readLines(path, warn = FALSE), collapse = "\n"),
+           error = function(e) "Changelog could not be read.")
+}
+
 about_ui <- function(id) {
   ns <- NS(id)
   tagList(
@@ -58,7 +73,7 @@ about_ui <- function(id) {
         style = "max-height:600px; overflow-y:auto; padding:10px;
                  border:1px solid #ddd; border-radius:4px;
                  white-space:pre-wrap; font-family:inherit; font-size:0.9em;",
-        paste(readLines("CHANGELOG.md", warn = FALSE), collapse = "\n")
+        ov_read_changelog()
       )
   )
 }

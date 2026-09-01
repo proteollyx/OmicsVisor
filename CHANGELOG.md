@@ -1,9 +1,150 @@
 # Changelog
 
 All notable changes to OmicsVisor are documented in this file.
-Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
+Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
+OmicsVisor adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+The version recorded in `version.R` is authoritative; the newest section below
+must always match it (enforced by `tests/testthat/test-version.R`).
 
 ---
+
+## [1.1.0] - 2026-09-01
+
+First public release. Adds a full automated test suite and fixes every defect
+it uncovered across the eighteen modules.
+
+### Added
+- Automated test suite (`tests/testthat/`, 360+ assertions) covering the helper
+  functions, the upload/column-detection pipeline and all eighteen modules via
+  `shiny::testServer()`, including simulated fixtures for missing values,
+  duplicate IDs, non-numeric intensity columns, non-syntactic column names,
+  all-NA columns, infinite values and single-row tables
+- Real-data smoke harness (`tests/manual/real_data_smoke.R`) that drives every
+  module against local `*QQ_Results*.xlsx` files and reports errors and warnings
+- Version-consistency tests: `version.R`, `CHANGELOG.md` and `CITATION.cff`
+  can no longer drift apart
+- `LICENSE` (MIT), `CITATION.cff` and `CONTRIBUTING.md`
+- GitHub Actions workflow running the test suite on every push and pull request
+- `ov_read_upload()` and `ov_detect_columns()` in `helper_functions.R`: the
+  upload and column-classification logic previously inlined in `app.R`, now
+  testable without starting a server
+- `ov_expand_palette()` and `ov_pdf_device()` helpers
+- Warning on upload when the file has no `id` column, explaining that the app
+  is ID-driven
+
+### Fixed
+- **`%||%` returned the fallback for any vector of length > 1.** The operator
+  tested `!isTRUE(nzchar(a))`, which is `FALSE` for multi-element vectors. The
+  visible symptom was the GCT Export "Gene symbol column" dropdown listing
+  every column in the table instead of the gene-like ones whenever the data had
+  two or more gene columns (e.g. DIA-NN output with both `Genes` and
+  `PG.Genes`). The definition also shadowed base R's `%||%` app-wide.
+- **Boxplot: grouping crashed when all five components were selected.**
+  `sapply()` simplifies to a matrix once every component returns a same-length
+  vector, and `do.call(cbind, <matrix>)` then failed with "second argument must
+  be a list".
+- **Boxplot: duplicate IDs aborted the plot** with a tibble recycling error.
+  The first matching row is now used and the ambiguity is reported.
+- **Boxplot: violin plots failed silently** when each group held a single
+  value, leaving a blank panel; the module now explains what to change.
+- **Heatmap: non-numeric intensity columns crashed the module.** Exports that
+  write `NaN` or `Filtered` into the matrix produce a character matrix, and
+  `scale()` then aborted with "'x' must be numeric or complex" outside any
+  `tryCatch`. Columns are coerced to numeric with a notification.
+- **PCA/UMAP: sample labels were silently renamed.** `as.data.frame(lapply(...))`
+  applied `make.names()`, so a column such as `Imputed 1` was plotted as
+  `Imputed.1`.
+- **PCA/UMAP: fixed palettes aborted the plot** with "Insufficient values in
+  manual scale" as soon as there were more groups than colours (Okabe-Ito holds
+  8, Brewer Set2 holds 8, Set1 holds 9). Palettes are now interpolated.
+- **PCA/UMAP: group annotations desynchronised** from the plotted samples when
+  a sample was dropped for having no finite values; dropped samples are now
+  reported.
+- **Correlation: single-row tables crashed** — `apply(..., 2, as.numeric)`
+  drops to a vector, so setting row names failed.
+- **ID List Generator: unmatched genes were reported as the literal `NA`.**
+  `find_genes()` returns `NA` for a miss and `id[NA]` yields `NA`, which was
+  pasted into the output the user copies.
+- **Volcano Printer: `NA` labels appeared on the plot** for features with a
+  missing logFC or adj.P value.
+- **VennDi: three-or-more-list comparison was wrong when only one ID was
+  shared**, because `sapply()` collapsed the membership matrix to a vector.
+- **Donut Plot: the ID selection ignored the applied cutoffs.** The donuts are
+  drawn from a snapshot taken on "Apply Cutoff" while the ID list read the live
+  inputs, so editing a cutoff without re-applying it returned IDs that
+  disagreed with the plotted counts.
+- **An invalid intensity-column regex took the whole app down.** A partially
+  typed pattern such as `^Imputed[` aborted the shared `data` reactive and with
+  it every module; it now falls back to "no match".
+- **PDF exports transliterated `≤`, `≥` and `—`.** The default `pdf()` device
+  is single-byte; exports now use `cairo_pdf` where available.
+- **The About tab could prevent the app from starting.** `about_ui()` read
+  `CHANGELOG.md` at UI-build time with an unguarded relative path.
+- Scatterplot: an all-NA comparison column no longer aborts the plot through
+  `cor(use = "complete.obs")`.
+- Donut Plot: a `logFC_` column with no matching `adj.P.Val_` column is shown
+  as all-"Other" rather than as an empty donut.
+
+### Changed
+- Donut Plot: the hit-selection logic, previously spelled out at three separate
+  call sites (which is how the v1.0.4 NA fix reached one of them but not the
+  others), is now a single function used by the plots, the checkboxes and the
+  ID export
+- Replaced the deprecated `aes_string()` in the PCA and Scatterplot modules
+- README rewritten for public release; its duplicate changelog section removed
+  in favour of this file
+- `.gitignore` extended to cover R session state and local result files
+
+## [1.0.4] - 2026-06-30
+
+### Fixed
+- Donut Plot: features with `NA` logFC or adj.P.Val values were counted as
+  significant hits. `NA < 0.05` is `NA`, and subsetting with `NA` inserts `NA`
+  elements that `length()` counts, inflating each donut by twice the number of
+  missing-value rows per comparison. Added `!is.na()` guards to the filtering
+  sites in the module.
+
+### Changed
+- README: added a changelog section documenting the donut fix
+- README: removed the `protigy_ov` section (it belongs with `protigy_ov.R`)
+
+## [1.0.3] - 2026-06-29
+
+### Added
+- Sidebar: regex usage examples, and a note that a custom pattern overrides the
+  dropdown selection
+- Donut Plot: descriptive subtitle
+- Volcano Printer: manual x/y axis limits with a clipping warning; cutoffs shown
+  in the plot subtitle and in the PDF filename; comparison name used as the plot
+  title
+- Boxplot: manual y-axis limits with a clipping warning
+- Scatterplot: cutoffs appended to the subtitle; comparison names and cutoffs
+  included in the PDF filename
+- Footer: browser compatibility note (tested with Chrome)
+
+## [1.0.1] - 2026-06-04
+
+### Added
+- PCA: scree plot, and a PC loadings table with CSV download
+
+### Changed
+- All modules: standardised `btn-sm` on action and download buttons
+- Boxplot: removed the "Generate Plot" button; the plot now refreshes
+  reactively, with explicit `renderPlot` dimensions
+- VennDi: input parser rewritten to split on comma, semicolon, space, tab or
+  newline; switched to `textAreaInput`; list values are preserved when the
+  number of lists changes; empty lists are reported
+
+### Fixed
+- `app.R`: `.shiny-download-link` added to the auto-width CSS rule so every
+  `downloadButton` respects the bslib flex layout
+- Heatmap: "invalid quartz() device size" fixed by giving `renderPlot` explicit
+  width/height/res and removing `outputOptions(suspendWhenHidden)`; added
+  `validate()` guards and `tryCatch`
+- UpSet Plot: the "Extract IDs" dropdown no longer diverges from the plot when
+  `min_set_size` or `n_intersects` change
+- PCA: plot overlap fixed by wrapping `plotOutput`s in `fluidRow`/`column(12)`
 
 ## [1.0.0] - 2026-05-21
 

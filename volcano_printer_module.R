@@ -108,14 +108,17 @@ volcano_printer_server <- function(id, data) {
     req(cols$logFC, cols$adjP)  # ensure they're valid
     
     df <- data()$data
-    
-    # Significance cutoff
-    df$significant <- abs(df[[cols$logFC]]) > input$logfc_cutoff & 
+
+    # Significance cutoff. A missing logFC or adj.P must read as "not
+    # significant" — leaving it NA propagates into label_display below and the
+    # plot then carries NA labels.
+    df$significant <- !is.na(df[[cols$logFC]]) & !is.na(df[[cols$adjP]]) &
+      abs(df[[cols$logFC]]) > input$logfc_cutoff &
       df[[cols$adjP]] < input$pval_cutoff
-    
+
     # If user typed IDs
-    selected_ids <- strsplit(input$id_selection, ",")[[1]]
-    selected_ids <- trimws(selected_ids)
+    selected_ids <- trimws(strsplit(input$id_selection %||% "", ",")[[1]])
+    selected_ids <- selected_ids[nzchar(selected_ids)]
     
     # Label columns
     if (!is.null(input$label_columns) && length(input$label_columns) > 0) {
@@ -126,11 +129,12 @@ volcano_printer_server <- function(id, data) {
     
     # If "label_only_sig" is TRUE, we label only those that are both selected and significant
     df$label_display <- ifelse(
-      df$id %in% selected_ids & (!input$label_only_sig | df$significant),
+      df$id %in% selected_ids & (!isTRUE(input$label_only_sig) | df$significant),
       df$labels,
       ""
     )
-    
+    df$label_display[is.na(df$label_display)] <- ""
+
     df
   })
   
@@ -207,9 +211,9 @@ volcano_printer_server <- function(id, data) {
           coord_cartesian(xlim = c(input$x_min, input$x_max),
                           ylim = c(input$y_min, input$y_max))
 
-      # Finally, save
+      # Finally, save. cairo_pdf so the "≤"/"≥" in the subtitle survive.
       ggsave(
-        filename = file, plot = plot_to_save, device = "pdf",
+        filename = file, plot = plot_to_save, device = ov_pdf_device(),
         width = input$plot_width, height = input$plot_height
       )
     }

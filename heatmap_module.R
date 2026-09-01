@@ -196,8 +196,25 @@ heatmap_server <- function(id, data) {
     }
     
     
-    # Subset columns
-    mat <- as.matrix(df[, input$intensity_columns, drop = FALSE])
+    # Subset columns and force a numeric matrix. Upstream exports sometimes
+    # write "NaN"/"Filtered" into the intensity block, which makes as.matrix()
+    # return a character matrix; scale() then aborts with "'x' must be numeric
+    # or complex" outside of any tryCatch.
+    sub_df <- df[, input$intensity_columns, drop = FALSE]
+    non_numeric <- !vapply(sub_df, is.numeric, logical(1))
+    if (any(non_numeric)) {
+      showNotification(
+        paste0(sum(non_numeric), " selected intensity column(s) are not numeric ",
+               "and were coerced; unparseable entries become missing values."),
+        type = "warning", duration = 10
+      )
+      sub_df[non_numeric] <- lapply(sub_df[non_numeric],
+                                    function(x) suppressWarnings(as.numeric(as.character(x))))
+    }
+
+    mat <- as.matrix(sub_df)
+    storage.mode(mat) <- "double"
+    rownames(mat) <- rownames(df)
 
     # Warn the user if the matrix contains missing values
     n_na <- sum(is.na(mat))

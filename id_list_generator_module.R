@@ -108,10 +108,17 @@ id_list_generator_server <- function(id, data) {
     selected_column <- data()$data[[input$search_column]]
     id_column <- data()$data$id
     indices <- find_genes(gene_list, selected_column, ignore.case = input$ignore_case)
-    matching_ids <- id_column[unlist(indices)]
-    
-    if (input$remove_na) matching_ids <- na.omit(matching_ids)
-    
+
+    # find_genes() returns NA for a gene with no match. Indexing with NA yields
+    # an NA element, so unmatched genes used to be reported (and copied) as the
+    # literal string "NA". Drop the misses before looking the IDs up.
+    idx <- unlist(indices, use.names = FALSE)
+    idx <- idx[!is.na(idx)]
+    matching_ids <- id_column[idx]
+
+    # `remove_na` is about NA values in the id column itself, not about misses.
+    if (isTRUE(input$remove_na)) matching_ids <- matching_ids[!is.na(matching_ids)]
+
     matching_ids
   })
   

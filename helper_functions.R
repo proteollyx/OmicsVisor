@@ -3,6 +3,19 @@
 # Author: Oliver Popp
 # ─────────────────────────────────────────────────────────
 
+# Default-value operator.
+#
+# Returns `b` only when `a` carries no usable value: NULL, a zero-length
+# vector, or a single empty string. A multi-element vector is a usable value
+# and must be returned unchanged — an earlier version tested
+# `!isTRUE(nzchar(a))`, which is FALSE for any vector of length > 1 and so
+# silently swapped real selections for the fallback.
+`%||%` <- function(a, b) {
+  if (is.null(a) || length(a) == 0L) return(b)
+  if (length(a) == 1L && is.character(a) && !is.na(a) && !nzchar(a)) return(b)
+  a
+}
+
 # Define the two color vectors
 woco <- c("#C1A172", "#FDA70D", "#F85414", "#677F6E", "#B25F00", "#007FB2", "pink",
   "#77B04B", "#9CC7D4", "#FF7F71", "#5F4B7B", "#88BDE6", "#FBB258", "#90CD97",
@@ -92,6 +105,84 @@ detect_comparisons <- function(col_names) {
   intersect(logFC_names, adj_names)
 }
 
+
+# ── Upload handling ──────────────────────────────────────────────────────────
+
+#' Read an uploaded results table.
+#'
+#' Kept out of app.R so the upload path is testable without starting a server.
+#'
+#' @param path      path on disk (Shiny's `input$upload$datapath`)
+#' @param file_name original file name, used only to pick the parser
+#' @return a plain data.frame
+ov_read_upload <- function(path, file_name = path) {
+  ext <- tolower(tools::file_ext(file_name))
+
+  df <- switch(
+    ext,
+    "xlsx" = openxlsx::read.xlsx(path, sheet = 1),
+    "xls"  = openxlsx::read.xlsx(path, sheet = 1),
+    "txt"  = ,
+    "tsv"  = as.data.frame(data.table::fread(
+      path, sep = "\t", quote = "", na.strings = c("", "NA", "NaN"))),
+    "csv"  = as.data.frame(data.table::fread(
+      path, sep = ",", quote = "\"", na.strings = c("", "NA", "NaN"))),
+    stop(sprintf(
+      "Unsupported file type: .%s (expected .xlsx, .xls, .txt, .tsv or .csv)",
+      ext), call. = FALSE)
+  )
+
+  if (is.list(df) && !is.data.frame(df)) df <- as.data.frame(do.call(cbind, df))
+  as.data.frame(df, stringsAsFactors = FALSE)
+}
+
+#' Classify the columns of a results table.
+#'
+#' @param df        the results table
+#' @param int_regex user-supplied intensity-column regex
+#' @return list(logFC_cols, adjP_cols, intensity_cols) — always character
+#'   vectors, never NULL.
+ov_detect_columns <- function(df, int_regex = "^Intensity") {
+  nms <- names(df)
+
+  # A user-typed regex can be syntactically invalid mid-edit (e.g. "^Imputed[").
+  # grep() would then abort the whole `data` reactive and take every module
+  # down with it, so fall back to "no match" instead.
+  safe_grep <- function(pattern) {
+    tryCatch(grep(pattern, nms, value = TRUE, ignore.case = TRUE),
+             error   = function(e) character(0),
+             warning = function(w) character(0))
+  }
+
+  list(
+    logFC_cols     = safe_grep("logFC"),
+    adjP_cols      = safe_grep("adj\\.?p|fdr|q\\.?val"),
+    intensity_cols = safe_grep(int_regex %||% "^Intensity")
+  )
+}
+
+#' Stretch a fixed colour vector to cover `n` groups.
+#'
+#' scale_*_manual() aborts with "Insufficient values in manual scale" as soon
+#' as there are more groups than colours — which a real experiment reaches
+#' easily (the Okabe-Ito palette holds 8, and one group per sample is common).
+#' Interpolating keeps the requested look and never errors.
+ov_expand_palette <- function(cols, n) {
+  cols <- cols[!is.na(cols)]
+  if (length(cols) == 0L) cols <- "#4C72B0"
+  if (n <= length(cols)) return(cols[seq_len(n)])
+  grDevices::colorRampPalette(cols)(n)
+}
+
+#' Open a PDF graphics device that can render the app's UTF-8 plot labels.
+#'
+#' The default `pdf()` device is limited to a single-byte encoding, so labels
+#' containing "≤", "≥" or "—" are silently transliterated with a warning.
+#' cairo_pdf handles them, and is available in every build that reports
+#' `capabilities("cairo")`.
+ov_pdf_device <- function() {
+  if (isTRUE(capabilities("cairo"))) grDevices::cairo_pdf else grDevices::pdf
+}
 
 read_gmt <- function(path) {
   lines <- readLines(path, warn = FALSE)

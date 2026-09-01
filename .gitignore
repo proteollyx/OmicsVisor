@@ -1,42 +1,60 @@
-# R session files
+# ── R session state ──────────────────────────────────────────────────────────
 .Rhistory
 .RData
-.Rprofile
 .Rproj.user/
 .Ruserdata
+.Rapp.history
 
-# renv (keep lockfile, ignore library)
+# .Rprofile is renv's activation hook and IS tracked; local overrides are not
+.Rprofile.local
+
+# ── renv (keep the lockfile, ignore the library) ─────────────────────────────
 renv/library/
 renv/staging/
+renv/sandbox/
+renv/local/
+renv/python/
 
-# OS
+# ── OS / editor cruft ────────────────────────────────────────────────────────
 .DS_Store
+Thumbs.db
+*~
+*.swp
+.vscode/
+.idea/
 
-# Logs
+# ── Logs ─────────────────────────────────────────────────────────────────────
 error logs/
 *.log
+*.Rout
 
-# rsconnect deployment files
+# ── Deployment artefacts ─────────────────────────────────────────────────────
 rsconnect/
+manifest.json
+.positai
+.secrets
 
-# Large data files (omics)
+# ── Project / result data: never commit unpublished omics data ───────────────
+data/
+data-raw/
+*QQ_Results*.xlsx
 *.raw
 *.mzML
 *.mzXML
 *.sqlite
 *.rds
 *.Rds
-data/
-data-raw/
+*.gct
+*.gmt
 
-# Temporary files
+# Test scratch output
+tests/manual/*.tsv
+tests/testthat/_snaps/*/*.new.*
+
+# ── Temporary files ──────────────────────────────────────────────────────────
 ~$*
 *.tmp
 
-# Posit Connect / shinyapps.io deployment manifest (auto-generated)
-manifest.json
-.positai
-
-# Internal planning docs
+# ── Internal planning docs (not part of the public release) ──────────────────
 v1.0_roadmap.md
 v1.0_roadmap.html

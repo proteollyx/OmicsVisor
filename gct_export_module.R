@@ -3,7 +3,10 @@
 # Author: Oliver Popp
 # ─────────────────────────────────────────────────────────
 
-`%||%` <- function(a, b) if (is.null(a) || length(a) == 0 || !isTRUE(nzchar(a))) b else a
+# `%||%` lives in helper_functions.R — it used to be defined here, where a
+# `!isTRUE(nzchar(a))` test made it return the fallback for any left-hand side
+# of length > 1 (so the gene-column dropdown below listed every column instead
+# of the gene-like ones).
 
 gct_export_ui <- function(id, title = "GCT Export (v1.2)") {
   ns <- NS(id)

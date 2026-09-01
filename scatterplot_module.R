@@ -92,9 +92,18 @@ scatterplot_server <- function(id, data) {
       df[df$Label != "" & df$Significance != "None", ]
     }
     
-    # Correlation coefficients
-    pearson <- cor(df[[input$x_logfc]], df[[input$y_logfc]], method = "pearson", use = "complete.obs")
-    spearman <- cor(df[[input$x_logfc]], df[[input$y_logfc]], method = "spearman", use = "complete.obs")
+    # Correlation coefficients. cor(use = "complete.obs") errors outright when
+    # no complete pair exists (an all-NA comparison column), which would take
+    # the whole plot down rather than just leaving the subtitle blank.
+    safe_cor <- function(method) {
+      tryCatch(
+        cor(df[[input$x_logfc]], df[[input$y_logfc]],
+            method = method, use = "complete.obs"),
+        error = function(e) NA_real_, warning = function(w) NA_real_
+      )
+    }
+    pearson  <- safe_cor("pearson")
+    spearman <- safe_cor("spearman")
     
     subtitle_text <- sprintf("Pearson: %.2f  |  Spearman: %.2f  |  adj.P ≤ %.2g  |  |logFC| ≥ %.2g",
                              pearson, spearman, input$pval_cutoff, input$logfc_cutoff)
@@ -102,15 +111,19 @@ scatterplot_server <- function(id, data) {
     
     p <- ggplot() +
       # Background: nonsignificant points
-      geom_point(data = df_bg, aes_string(x = x, y = y), color = "darkgrey", size = input$point_size, alpha = 0.5) +
-      
+      geom_point(data = df_bg, aes(x = .data[[x]], y = .data[[y]]),
+                 color = "darkgrey", size = input$point_size, alpha = 0.5) +
+
       # Foreground: significant points with colour mapping
-      geom_point(data = df_fg, aes_string(x = x, y = y, color = "Significance"), size = input$point_size) +
-      
+      geom_point(data = df_fg,
+                 aes(x = .data[[x]], y = .data[[y]], color = .data$Significance),
+                 size = input$point_size) +
+
       # Labels for selected points using same colours
       ggrepel::geom_text_repel(
         data = label_df,
-        aes_string(x = x, y = y, label = "Label", color = "Significance"),
+        aes(x = .data[[x]], y = .data[[y]],
+            label = .data$Label, color = .data$Significance),
         size = input$label_size,
         segment.color = "black",
         max.overlaps = Inf,
@@ -165,11 +178,9 @@ scatterplot_server <- function(id, data) {
              "_", Sys.Date(), ".pdf")
     },
     content = function(file) {
-      pdf(file, width = input$plot_width, height = input$plot_height)
-      df <- scatter_data()
-      p <- plot_scatter(df, input)
-      print(p)
-      dev.off()
+      ggsave(file, plot = plot_scatter(scatter_data(), input),
+             device = ov_pdf_device(),
+             width = input$plot_width, height = input$plot_height)
     }
   )
   })

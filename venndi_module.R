@@ -119,8 +119,14 @@ venndi_server <- function(id) {
       all_ids <- clean_ids(unique(unlist(input_lists)))
       if (length(all_ids) == 0L) return(list())
       nms <- names(input_lists)
-      membership <- sapply(input_lists, function(lst) all_ids %in% lst)
-      membership <- as.data.frame(membership, stringsAsFactors = FALSE)
+      # vapply with an explicit template keeps this a matrix even when there is
+      # only one ID; sapply() would collapse to a vector and the signatures
+      # would then be computed per list instead of per ID.
+      membership <- vapply(input_lists,
+                           function(lst) all_ids %in% lst,
+                           logical(length(all_ids)))
+      membership <- matrix(membership, nrow = length(all_ids),
+                           dimnames = list(NULL, nms))
       signatures <- apply(membership, 1L, function(x) paste(as.integer(x), collapse = ""))
       groups <- split(all_ids, signatures)
       groups <- groups[lengths(groups) > 0L]

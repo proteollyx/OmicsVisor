@@ -31,68 +31,89 @@ donut_plot_server <- function(id, data) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
 
+    # The donuts are drawn from a snapshot taken when "Apply Cutoff" is
+    # clicked. The ID selection below must read the same snapshot, or editing
+    # a cutoff without re-applying it silently returns IDs that disagree with
+    # the plotted counts.
+    applied <- reactiveValues(logfc = 1, pval = 0.05)
     observeEvent(input$apply_cutoff, {
+      applied$logfc <- input$logfc_cutoff
+      applied$pval  <- input$pval_cutoff
+    }, ignoreInit = FALSE)
+
+    # Single source of truth for "which IDs are hits in comparison i".
+    # This used to be spelled out at three separate call sites, which is how
+    # the v1.0.4 NA-inflation bug came to be fixed in one of them but not the
+    # others. Everything below now goes through here.
+    hits_for <- function(i, logfc_cut, pval_cut) {
+      empty     <- list(up = character(0), down = character(0),
+                        all_ids = character(0), title = "")
+      logfc_col <- data()$logFC_cols[i]
+      if (is.na(logfc_col)) return(empty)
+
+      adjp_col <- gsub("logFC", "adj.P.Val", logfc_col)
+      df       <- data()$data
+      lfc      <- df[[logfc_col]]
+      adjp     <- df[[adjp_col]]
+      title    <- gsub("\\.", " ", sub("logFC_", "", logfc_col))
+
+      # A logFC column without a matching adj.P.Val column cannot be
+      # thresholded; show it as all-"Other" rather than as zero features.
+      if (is.null(lfc) || is.null(adjp))
+        return(list(up = character(0), down = character(0),
+                    all_ids = df$id, title = title))
+
+      # !is.na() guards are essential: NA < 0.05 is NA, and subsetting with NA
+      # inserts NA elements that length() then counts as hits.
+      valid <- !is.na(lfc) & !is.na(adjp) & adjp < pval_cut
+      list(
+        up      = df$id[valid & lfc >  logfc_cut],
+        down    = df$id[valid & lfc < -logfc_cut],
+        all_ids = df$id,
+        title   = title
+      )
+    }
+
+    observeEvent(input$apply_cutoff, {
+      n_comp <- length(data()$logFC_cols)
+
       output$donut_plots_ui <- renderUI({
         tagList(
-          lapply(seq_along(data()$logFC_cols), function(i) {
-            logfc_col  <- data()$logFC_cols[i]
-            adjp_col   <- gsub("logFC", "adj.P.Val", logfc_col)
-            all_ids    <- data()$data$id
-            lfc        <- data()$data[[logfc_col]]
-            adjp       <- data()$data[[adjp_col]]
-            valid      <- !is.na(lfc) & !is.na(adjp)
-            down_ids   <- all_ids[valid & lfc < -input$logfc_cutoff & adjp < input$pval_cutoff]
-            up_ids     <- all_ids[valid & lfc >  input$logfc_cutoff & adjp < input$pval_cutoff]
-            plot_title <- gsub("\\.", " ", sub("logFC_", "", logfc_col))
+          lapply(seq_len(n_comp), function(i) {
+            title <- hits_for(i, applied$logfc, applied$pval)$title
             tagList(
               plotOutput(ns(paste0("donut_plot_", i)), height = "300px"),
-              checkboxInput(ns(paste0("select_up_",   i)), label = paste("Select Upregulated for",   plot_title)),
-              checkboxInput(ns(paste0("select_down_", i)), label = paste("Select Downregulated for", plot_title)),
+              checkboxInput(ns(paste0("select_up_",   i)), label = paste("Select Upregulated for",   title)),
+              checkboxInput(ns(paste0("select_down_", i)), label = paste("Select Downregulated for", title)),
               hr()
             )
           })
         )
       })
 
-      lapply(seq_along(data()$logFC_cols), function(i) {
-        logfc_col  <- data()$logFC_cols[i]
-        adjp_col   <- gsub("logFC", "adj.P.Val", logfc_col)
-        all_ids    <- data()$data$id
-        lfc        <- data()$data[[logfc_col]]
-        adjp       <- data()$data[[adjp_col]]
-        valid      <- !is.na(lfc) & !is.na(adjp)
-        down_ids   <- all_ids[valid & lfc < -input$logfc_cutoff & adjp < input$pval_cutoff]
-        up_ids     <- all_ids[valid & lfc >  input$logfc_cutoff & adjp < input$pval_cutoff]
-        plot_title <- gsub("\\.", " ", sub("logFC_", "", logfc_col))
+      lapply(seq_len(n_comp), function(i) {
+        h <- hits_for(i, applied$logfc, applied$pval)
         output[[paste0("donut_plot_", i)]] <- renderPlot({
-          donut_plot(all_ids, down_ids, up_ids, plot_title)
+          donut_plot(h$all_ids, h$down, h$up, h$title)
         }, width = 600, height = 300)
       })
     })
 
     selected_ids <- reactive({
-      any_selected <- any(sapply(seq_along(data()$logFC_cols), function(i) {
-        isTRUE(input[[paste0("select_up_", i)]]) || isTRUE(input[[paste0("select_down_", i)]])
-      }))
-      if (!any_selected) return(character(0))
+      n_comp <- length(data()$logFC_cols)
+      picked <- vapply(seq_len(n_comp), function(i)
+        isTRUE(input[[paste0("select_up_", i)]]) ||
+        isTRUE(input[[paste0("select_down_", i)]]),
+        logical(1))
+      if (!any(picked)) return(character(0))
 
       result <- NULL
-      for (i in seq_along(data()$logFC_cols)) {
-        if (isTRUE(input[[paste0("select_up_", i)]]) || isTRUE(input[[paste0("select_down_", i)]])) {
-          logfc_col <- data()$logFC_cols[i]
-          adjp_col  <- gsub("logFC", "adj.P.Val", logfc_col)
-          lfc       <- data()$data[[logfc_col]]
-          adjp      <- data()$data[[adjp_col]]
-          valid     <- !is.na(lfc) & !is.na(adjp)
-          up_ids    <- if (isTRUE(input[[paste0("select_up_", i)]])) {
-            data()$data$id[valid & lfc >  input$logfc_cutoff & adjp < input$pval_cutoff]
-          } else character(0)
-          down_ids  <- if (isTRUE(input[[paste0("select_down_", i)]])) {
-            data()$data$id[valid & lfc < -input$logfc_cutoff & adjp < input$pval_cutoff]
-          } else character(0)
-          pair_ids  <- unique(c(up_ids, down_ids))
-          result    <- if (is.null(result)) pair_ids else intersect(result, pair_ids)
-        }
+      for (i in which(picked)) {
+        h        <- hits_for(i, applied$logfc, applied$pval)
+        up_ids   <- if (isTRUE(input[[paste0("select_up_",   i)]])) h$up   else character(0)
+        down_ids <- if (isTRUE(input[[paste0("select_down_", i)]])) h$down else character(0)
+        pair_ids <- unique(c(up_ids, down_ids))
+        result   <- if (is.null(result)) pair_ids else intersect(result, pair_ids)
       }
       if (is.null(result)) character(0) else result
     })

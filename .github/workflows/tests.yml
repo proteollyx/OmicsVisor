@@ -1,0 +1,83 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  testthat:
+    runs-on: ubuntu-latest
+    name: R ${{ matrix.r }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        r: ['release', 'oldrel-1']
+
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+      R_KEEP_PKG_SOURCE: yes
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: ${{ matrix.r }}
+          use-public-rspm: true
+
+      # System libraries needed by the app's dependency tree (Cairo for the
+      # cairo_pdf export device, libxml2/curl/openssl for the tidyverse stack).
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libcairo2-dev libxt-dev libcurl4-openssl-dev libssl-dev \
+            libxml2-dev libfontconfig1-dev libharfbuzz-dev libfribidi-dev \
+            libfreetype6-dev libpng-dev libtiff5-dev libjpeg-dev
+
+      # renv.lock pins the exact versions the app is developed against, but it
+      # is macOS/R-4.6 specific. Install the declared packages from the public
+      # RSPM binaries instead so CI stays fast and portable.
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          packages: |
+            any::shiny
+            any::bslib
+            any::plotly
+            any::openxlsx
+            any::DT
+            any::data.table
+            any::dplyr
+            any::tidyr
+            any::VennDiagram
+            any::ggrepel
+            any::pheatmap
+            any::stringr
+            any::shinyalert
+            any::ggbeeswarm
+            any::umap
+            any::UpSetR
+            any::ggplot2
+            any::RColorBrewer
+            any::testthat
+
+      - name: Run test suite
+        run: Rscript tests/testthat.R
+
+      - name: Check the app parses and every module loads
+        run: |
+          Rscript -e '
+            for (f in setdiff(list.files(".", pattern = "\\.R$"), "app.R")) {
+              invisible(parse(f))
+            }
+            invisible(parse("app.R"))
+            cat("all R files parse\n")
+          '

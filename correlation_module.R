@@ -118,9 +118,13 @@ correlation_server <- function(id, data) {
              "Select at least 3 intensity columns to compute meaningful correlations.")
       )
 
-      # Build numeric matrix: rows = features, columns = samples
-      mat <- apply(as.matrix(df[, int_cols, drop = FALSE]), 2, as.numeric)
-      rownames(mat) <- df$id
+      # Build numeric matrix: rows = features, columns = samples.
+      # apply(..., 2, as.numeric) drops to a plain vector when the frame has a
+      # single row, so build the matrix explicitly instead.
+      mat <- as.matrix(df[, int_cols, drop = FALSE])
+      mat <- matrix(suppressWarnings(as.numeric(mat)),
+                    nrow = nrow(df), ncol = length(int_cols),
+                    dimnames = list(df$id, int_cols))
 
       # Locate the reference row — exact match against the id column only --------
       feature_name <- trimws(input$ref_feature)
@@ -149,7 +153,8 @@ correlation_server <- function(id, data) {
 
       for (i in seq_len(n_rows)) {
         row_vec <- as.numeric(mat[i, ])
-        if (is.na(sd(row_vec, na.rm = TRUE)) || sd(row_vec, na.rm = TRUE) == 0) {
+        row_sd  <- stats::sd(row_vec, na.rm = TRUE)
+        if (is.na(row_sd) || row_sd == 0) {
           cor_r[i] <- NA; cor_p[i] <- NA; next
         }
         ct <- tryCatch(
@@ -286,7 +291,7 @@ correlation_server <- function(id, data) {
                "_", Sys.Date(), ".pdf")
       },
       content = function(file) {
-        ggsave(file, plot = make_plot(), device = "pdf",
+        ggsave(file, plot = make_plot(), device = ov_pdf_device(),
                width = input$pdf_width, height = input$pdf_height)
       }
     )

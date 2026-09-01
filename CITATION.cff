@@ -1,0 +1,27 @@
+cff-version: 1.2.0
+message: "If you use OmicsVisor in your research, please cite it as below."
+title: "OmicsVisor: an interactive Shiny application for exploring differential omics results"
+abstract: >-
+  OmicsVisor is a modular R Shiny application for interactive exploration and
+  visualisation of differential omics analysis results (proteomics,
+  transcriptomics and related data types). It provides volcano, donut, UpSet,
+  heatmap, PCA/UMAP, boxplot, correlation and scatter views over a single
+  ID-keyed results table, plus GCT export and 1D enrichment analysis.
+type: software
+authors:
+  - given-names: Oliver
+    family-names: Popp
+    email: oliver.popp@mdc-berlin.de
+    affiliation: "Max Delbrück Center for Molecular Medicine in the Helmholtz Association (MDC), Berlin, Germany"
+repository-code: "https://github.com/proteollyx/OmicsVisor"
+url: "https://github.com/proteollyx/OmicsVisor"
+license: MIT
+version: 1.1.0
+date-released: "2026-09-01"
+keywords:
+  - proteomics
+  - omics
+  - data visualisation
+  - shiny
+  - R
+  - differential expression

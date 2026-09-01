@@ -273,23 +273,25 @@ server <- function(input, output, session) {
     updateTextInput(session, "int_regex", value = input$int_regex_preset)
   }, ignoreInit = TRUE)
 
-  # Raw file read — cached; does not depend on swap selection
+  # Raw file read — cached; does not depend on swap selection.
+  # The parsing itself lives in helper_functions.R so it can be unit-tested.
   raw_file <- reactive({
     req(input$upload_excel)
-    ext <- tolower(tools::file_ext(input$upload_excel$name))
-    df <- switch(
-      ext,
-      "xlsx" = openxlsx::read.xlsx(input$upload_excel$datapath, sheet = 1),
-      "xls"  = openxlsx::read.xlsx(input$upload_excel$datapath, sheet = 1),
-      "txt"  = as.data.frame(data.table::fread(input$upload_excel$datapath, sep = "\t",   quote = "", na.strings = c("", "NA"))),
-      "tsv"  = as.data.frame(data.table::fread(input$upload_excel$datapath, sep = "\t",   quote = "", na.strings = c("", "NA"))),
-      "csv"  = as.data.frame(data.table::fread(input$upload_excel$datapath, sep = ",",    quote = "\"", na.strings = c("", "NA"))),
-      {
-        validate(need(FALSE, sprintf("Unsupported file type: .%s (expected .xlsx, .txt, .tsv, .csv)", ext)))
-        return(NULL)
+    df <- tryCatch(
+      ov_read_upload(input$upload_excel$datapath, input$upload_excel$name),
+      error = function(e) {
+        validate(need(FALSE, conditionMessage(e)))
+        NULL
       }
     )
-    if (is.list(df) && !is.data.frame(df)) df <- as.data.frame(do.call(cbind, df))
+    validate(need(!is.null(df) && nrow(df) > 0,
+                  "The uploaded file contains no rows."))
+    if (!"id" %in% names(df))
+      showNotification(
+        paste("No 'id' column found. OmicsVisor is ID-driven: most modules",
+              "need a unique 'id' column and will stay empty without one."),
+        type = "warning", duration = 12
+      )
     df
   })
 
@@ -313,16 +315,7 @@ server <- function(input, output, session) {
     sel <- input$swap_selected
     if (length(sel) > 0) df <- swapFC(df, groups = sel)
 
-    logFC_cols     <- grep("logFC", names(df), value = TRUE, ignore.case = TRUE)
-    adjP_cols      <- grep("adj\\.?p|fdr|q\\.?val", names(df), value = TRUE, ignore.case = TRUE)
-    intensity_cols <- grep(input$int_regex %||% "^Intensity", names(df), value = TRUE, ignore.case = TRUE)
-
-    list(
-      data           = df,
-      logFC_cols     = logFC_cols,
-      adjP_cols      = adjP_cols,
-      intensity_cols = intensity_cols
-    )
+    c(list(data = df), ov_detect_columns(df, input$int_regex))
   })
 
   output$download_swapped <- downloadHandler(

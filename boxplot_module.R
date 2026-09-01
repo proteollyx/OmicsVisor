@@ -156,18 +156,15 @@ plot_server <- function(id, data) {
 
     group_annotations <- reactive({
       comps <- split_components()
-      groups <- sapply(seq_len(ncol(comps)), function(i) {
-        if (isTRUE(input[[paste0("group_component_", i)]]))
-          comps[, i]
-        else
-          NULL
+      # lapply, not sapply: once every component is checked sapply simplifies
+      # the result to a matrix, and do.call(cbind, <matrix>) then fails with
+      # "second argument must be a list".
+      groups <- lapply(seq_len(ncol(comps)), function(i) {
+        if (isTRUE(input[[paste0("group_component_", i)]])) comps[, i] else NULL
       })
-      if (all(sapply(groups, is.null))) {
-        NULL
-      } else {
-        apply(do.call(cbind, groups[!sapply(groups, is.null)]), 1,
-              paste, collapse = "_")
-      }
+      groups <- groups[!vapply(groups, is.null, logical(1))]
+      if (length(groups) == 0) return(NULL)
+      apply(do.call(cbind, groups), 1, paste, collapse = "_")
     })
 
     selected_data <- reactive({
@@ -175,6 +172,19 @@ plot_server <- function(id, data) {
       df <- data()$data
       df <- df[df$id %in% selected_ids(), c("id", input$intensity_columns), drop = FALSE]
       validate(need(nrow(df) > 0, "None of the requested IDs were found."))
+
+      # IDs are assumed unique. If the table contains duplicates, plot the
+      # first occurrence rather than silently mixing rows (and, previously,
+      # erroring out on the group-annotation recycling below).
+      if (nrow(df) > 1) {
+        showNotification(
+          paste0("ID '", selected_ids()[1], "' matches ", nrow(df),
+                 " rows; showing the first. IDs are expected to be unique."),
+          type = "warning", duration = 8
+        )
+        df <- df[1, , drop = FALSE]
+      }
+
       df_long <- tidyr::pivot_longer(
         df,
         cols      = -id,
@@ -196,10 +206,13 @@ plot_server <- function(id, data) {
         else                          "Crossbars show mean ± SEM"
       } else NULL
 
+      n_groups <- length(unique(df_long$Group))
+      pal      <- ov_expand_palette(distcols3, n_groups)
+
       base <- ggplot(df_long, aes(x = Group, y = Intensity, colour = Group, fill = Group)) +
         theme_minimal() +
-        scale_colour_manual(values = distcols3) +
-        scale_fill_manual(values = distcols3) +
+        scale_colour_manual(values = pal) +
+        scale_fill_manual(values = pal) +
         labs(x = "Grouping", y = "Intensity", title = title_main,
              subtitle = subtitle_cb) +
         theme(axis.text.x = element_text(angle = 45, hjust = 1))
@@ -207,6 +220,16 @@ plot_server <- function(id, data) {
       if (input$plot_type == "box") {
         base <- base + geom_boxplot(outlier.shape = NA, col = "black")
       } else if (input$plot_type == "violin") {
+        # stat_ydensity() cannot estimate a density from a single observation
+        # and fails per-group with an opaque ggplot warning, leaving a blank
+        # panel. Say what is wrong instead.
+        min_n <- min(table(df_long$Group[!is.na(df_long$Intensity)]))
+        validate(need(
+          length(min_n) > 0 && min_n >= 2,
+          paste("Violin plots need at least two values per group. Select",
+                "grouping components so replicates are pooled, or switch to",
+                "Boxplot or Crossbar.")
+        ))
         base <- base + geom_violin(col = "black")
       } else {
         se_fun <- function(x) { x <- x[!is.na(x)]; sd(x) / sqrt(length(x)) }
@@ -214,7 +237,6 @@ plot_server <- function(id, data) {
           stat_summary(fun = mean,
                        geom = "crossbar",
                        width = 0.5,
-                       fatten = 1,
                        fun.min = if (input$error_type == "sd")
                          function(x) mean(x) - sd(x)
                        else
@@ -225,7 +247,7 @@ plot_server <- function(id, data) {
                          function(x) mean(x) + se_fun(x),
                        colour = "black", alpha = 0.4,
                        aes(fill = Group)) +
-          scale_fill_manual(values = distcols3, guide = "none")
+          scale_fill_manual(values = pal, guide = "none")
       }
 
       if (isTRUE(input$show_jitter))
@@ -246,7 +268,7 @@ plot_server <- function(id, data) {
     output$download_plot <- downloadHandler(
       filename = function() paste0("protein_plot_", format(Sys.time(), "%Y%m%d%H%M%S"), ".pdf"),
       content = function(file) {
-        ggsave(filename = file, plot = make_plot(), device = "pdf",
+        ggsave(filename = file, plot = make_plot(), device = ov_pdf_device(),
                width = input$pdf_width, height = input$pdf_height)
       }
     )

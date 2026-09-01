@@ -228,9 +228,14 @@ pca_server <- function(id, data) {
       df <- df[df$id %in% selected_ids, , drop = FALSE]
     }
 
-    # Select only chosen intensity columns and coerce to numeric
+    # Select only chosen intensity columns and coerce to numeric.
+    # check.names = FALSE: without it make.names() silently rewrites any
+    # non-syntactic sample name ("Imputed 1" -> "Imputed.1"), so the PCA
+    # points end up labelled with something the user never chose.
     df <- df[, input$intensity_columns, drop = FALSE]
-    df <- as.data.frame(lapply(df, function(x) as.numeric(as.character(x))))
+    df <- as.data.frame(lapply(df, function(x) as.numeric(as.character(x))),
+                        check.names = FALSE, stringsAsFactors = FALSE)
+    names(df)    <- input$intensity_columns
     rownames(df) <- seq_len(nrow(df))
 
     # Drop features (rows) with any missing value; PCA/UMAP require a complete matrix
@@ -267,6 +272,12 @@ pca_server <- function(id, data) {
     validate(
       need(ncol(df) > 1, "Need at least two samples with finite values for PCA.")
     )
+    if (any(!keep_cols))
+      showNotification(
+        paste0(sum(!keep_cols), " sample(s) dropped from PCA: no finite values (",
+               paste(names(keep_cols)[!keep_cols], collapse = ", "), ")."),
+        type = "warning", duration = 8
+      )
 
     # prcomp expects variables in columns, samples in rows → transpose
     pca <- tryCatch(
@@ -278,12 +289,13 @@ pca_server <- function(id, data) {
     
     pca_df <- as.data.frame(pca$x)
     pca_df$Sample <- rownames(pca_df)
-    
-    # Apply grouping annotations
+
+    # Apply grouping annotations. They are computed per selected intensity
+    # column, so they must be subset by keep_cols before being attached —
+    # otherwise dropping a sample makes the lengths disagree.
     annotations <- group_annotations()
-    if (!is.null(annotations)) {
-      # annotations are per column (i.e., per sample), so we map by column order
-      pca_df$Group <- annotations
+    if (!is.null(annotations) && length(annotations) == length(keep_cols)) {
+      pca_df$Group <- annotations[keep_cols]
     } else {
       pca_df$Group <- pca_df$Sample
     }
@@ -318,7 +330,7 @@ pca_server <- function(id, data) {
     df <- dr_data()
     keep_cols <- vapply(df, function(x) any(is.finite(x)), logical(1))
     df <- df[, keep_cols, drop = FALSE]
-    
+
     validate(
       need(ncol(df) > 1, "Need at least two samples with finite values for UMAP.")
     )
@@ -351,66 +363,53 @@ pca_server <- function(id, data) {
     umap_df <- as.data.frame(layout)
     colnames(umap_df) <- paste0("UMAP", seq_len(ncol(umap_df)))
     umap_df$Sample <- rownames(mat)
-    
+
     annotations <- group_annotations()
-    if (!is.null(annotations)) {
-      umap_df$Group <- annotations
+    if (!is.null(annotations) && length(annotations) == length(keep_cols)) {
+      umap_df$Group <- annotations[keep_cols]
     } else {
       umap_df$Group <- umap_df$Sample
     }
-    
+
     umap_df
   })
   
-  # ---- Colour scale reactive ----
-  color_scale <- reactive({
-    scheme <- input$color_scheme
-    
-    if (scheme == "combined") {
-      if (exists("combined_colors", inherits = TRUE)) {
-        cols <- get("combined_colors", inherits = TRUE)
-        if (is.null(cols) || length(cols) == 0) {
-          return(scale_color_discrete())
-        } else {
-          return(scale_color_manual(values = cols))
-        }
-      } else {
-        return(scale_color_discrete())
-      }
-    }
-    
-    if (scheme == "ggplot") {
+  # ---- Colour scale ----
+  # Every fixed palette is finite (Okabe-Ito has 8 colours, Brewer Set2 has 8,
+  # Set1 has 9). With one group per sample a routine experiment exceeds that
+  # and scale_*_manual()/scale_*_brewer() abort with "Insufficient values in
+  # manual scale". Interpolating to n_groups keeps the intended look and never
+  # takes the plot down.
+  color_scale <- function(n_groups) {
+    scheme <- input$color_scheme %||% "combined"
+    n      <- max(1L, as.integer(n_groups))
+
+    base_cols <- switch(
+      scheme,
+      combined = if (exists("combined_colors", inherits = TRUE))
+                   get("combined_colors", inherits = TRUE) else NULL,
+      set1     = RColorBrewer::brewer.pal(9, "Set1"),
+      set2     = RColorBrewer::brewer.pal(8, "Set2"),
+      okabe    = c("#E69F00", "#56B4E9", "#009E73", "#F0E442",
+                   "#0072B2", "#D55E00", "#CC79A7", "#000000"),
+      NULL
+    )
+
+    if (is.null(base_cols) || length(base_cols) == 0)
       return(scale_color_discrete())
-    }
-    
-    if (scheme == "set1") {
-      return(scale_color_brewer(palette = "Set1"))
-    }
-    
-    if (scheme == "set2") {
-      return(scale_color_brewer(palette = "Set2"))
-    }
-    
-    if (scheme == "okabe") {
-      okabe_ito <- c(
-        "#E69F00", "#56B4E9", "#009E73", "#F0E442",
-        "#0072B2", "#D55E00", "#CC79A7", "#000000"
-      )
-      return(scale_color_manual(values = okabe_ito))
-    }
-    
-    scale_color_discrete()
-  })
+
+    scale_color_manual(values = ov_expand_palette(base_cols, n))
+  }
   
   # ---- Unified plotting function ----
   create_dr_plot <- reactive({
     method <- input$dr_method
-    col_scale <- color_scale()
-    
+
     if (method == "PCA") {
       res    <- pca_results()
       pca_df <- res$df
-      
+      col_scale <- color_scale(length(unique(pca_df$Group)))
+
       x_pc <- input$pca_x_pc
       y_pc <- input$pca_y_pc
       
@@ -423,7 +422,8 @@ pca_server <- function(id, data) {
       x_label <- sprintf("%s (%.1f%%)", x_pc, var[x_pc])
       y_label <- sprintf("%s (%.1f%%)", y_pc, var[y_pc])
 
-      ggplot(pca_df, aes_string(x = x_pc, y = y_pc, color = "Group", label = "Sample")) +
+      ggplot(pca_df, aes(x = .data[[x_pc]], y = .data[[y_pc]],
+                         color = .data$Group, label = .data$Sample)) +
         geom_point(size = input$point_size) +
         ggrepel::geom_text_repel(size = input$label_size) +
         labs(
@@ -435,8 +435,9 @@ pca_server <- function(id, data) {
         col_scale
       
     } else {  # UMAP
-      umap_df <- umap_results()
-      
+      umap_df   <- umap_results()
+      col_scale <- color_scale(length(unique(umap_df$Group)))
+
       validate(
         need("UMAP1" %in% names(umap_df) && "UMAP2" %in% names(umap_df),
              "UMAP did not produce at least two components.")
@@ -484,10 +485,8 @@ pca_server <- function(id, data) {
       paste0(tolower(method), "_plot.pdf")
     },
     content = function(file) {
-      pdf(file, width = input$pdf_width, height = input$pdf_height)
-      p <- create_dr_plot()
-      print(p)
-      dev.off()
+      ggsave(file, plot = create_dr_plot(), device = ov_pdf_device(),
+             width = input$pdf_width, height = input$pdf_height)
     }
   )
   
