@@ -12,7 +12,7 @@ authors:
   - given-names: Oliver
     family-names: Popp
     email: oliver.popp@mdc-berlin.de
-    affiliation: "Max Delbrück Center for Molecular Medicine in the Helmholtz Association (MDC), Berlin, Germany"
+    affiliation: "Technology Platform Proteomics, Max Delbrück Center for Molecular Medicine in the Helmholtz Association (MDC), Berlin, Germany"
 repository-code: "https://github.com/proteollyx/OmicsVisor"
 url: "https://github.com/proteollyx/OmicsVisor"
 license: MIT

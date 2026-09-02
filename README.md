@@ -160,7 +160,33 @@ metadata is in [CITATION.cff](CITATION.cff).
 
 MIT — see [LICENSE](LICENSE).
 
+### Image credits
+
+The decorative interface images in `www/` (`omics_icon3.png`,
+`hedgehog_1DE.png`) were generated with OpenAI ChatGPT. Purely AI-generated
+images may not be eligible for copyright protection, so they are provided
+as-is and are **not** covered by the MIT licence above.
+
+---
+
+## Development and AI assistance
+
+OmicsVisor was designed, developed and tested by Oliver Popp, with assistance
+from generative AI coding tools: early development was supported by OpenAI
+ChatGPT, and later work — including the automated test suite and the bug fixes
+released in v1.1.0 — by Anthropic Claude. Every change was reviewed,
+integrated and tested by the author, and the scientific design decisions are
+his own.
+
+This is stated for transparency. It may bear on the copyright status of
+individual code fragments, which is an unsettled question for AI-assisted
+software; it does not affect your freedom to use, modify and redistribute
+OmicsVisor under the MIT licence.
+
+---
+
 ## Author
 
 Oliver Popp — [oliver.popp@mdc-berlin.de](mailto:oliver.popp@mdc-berlin.de)
+Technology Platform Proteomics
 Max Delbrück Center for Molecular Medicine (MDC), Berlin
