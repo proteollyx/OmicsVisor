@@ -45,9 +45,14 @@ test_that("every www asset the app references exists on disk", {
   # tags$head() content is injected at render time, so it is not present in
   # as.character(ui); read the src/href values straight out of app.R instead.
   src <- paste(readLines(file.path(OV_ROOT, "app.R"), warn = FALSE), collapse = "\n")
-  refs <- unique(unlist(regmatches(
-    src, gregexpr('(?<=(src|href) = ")[^"]+\\.(png|ico|webmanifest)', src, perl = TRUE)
-  )))
+
+  # Match the quoted asset path directly rather than using a lookbehind:
+  # PCRE requires fixed-length lookbehind, so "(?<=(src|href) = \")" is
+  # rejected outright on some builds (it alternates 3 vs 4 characters). It also
+  # missed aligned assignments such as `src   = "..."`.
+  refs <- unique(gsub('"', '', unlist(regmatches(
+    src, gregexpr('"[^"]+\\.(png|ico|webmanifest)"', src)
+  ))))
 
   expect_gt(length(refs), 0)
   for (a in refs)
