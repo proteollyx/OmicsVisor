@@ -211,6 +211,36 @@ ov_intensity_candidates <- function(df) {
   candidates
 }
 
+#' Rank candidate intensity columns by shared leading token.
+#'
+#' Listing arbitrary candidates is not much help on a wide table: a phospho
+#' peptide-collapse export offers 49 numeric non-statistic columns, of which
+#' the useful ones are two blocks (`Intensity.` x19, `Ori.` x20) buried among
+#' `PTM_*`, `n_valid_*` and `sparse_*`. Grouping by leading token and ranking
+#' by block size surfaces the real sample blocks first.
+#'
+#' @param min_size smallest block worth proposing
+#' @return named list of column vectors, largest block first; names are the
+#'   prefixes (including their separator), ready to use as `^<prefix>`
+ov_intensity_prefix_groups <- function(df, min_size = 3L) {
+  cand <- ov_intensity_candidates(df)
+  if (length(cand) == 0L) return(list())
+
+  # Leading token: up to and including the first "." if the name has one,
+  # otherwise up to and including the first "_".
+  stem <- ifelse(
+    grepl(".", cand, fixed = TRUE),
+    sub("^([^.]+\\.).*$", "\\1", cand),
+    sub("^([^_]+_).*$",     "\\1", cand)
+  )
+  stem[stem == cand] <- ""          # no separator -> no usable prefix
+
+  groups <- split(cand, stem)
+  groups <- groups[names(groups) != "" & lengths(groups) >= min_size]
+  if (length(groups) == 0L) return(list())
+  groups[order(-lengths(groups), names(groups))]
+}
+
 #' Longest common leading token shared by a set of column names, if any.
 #'
 #' Used to propose a starting regex in the sidebar hint.

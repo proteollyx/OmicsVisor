@@ -168,3 +168,44 @@ test_that("a proposed prefix actually matches the columns it came from", {
     expect_true(all(cand %in% matched))
   }
 })
+
+test_that("prefix groups surface the real sample blocks, largest first", {
+  # Mirrors a phospho peptide-collapse export: two genuine sample blocks
+  # (Intensity./Ori.) buried among PTM_*, n_valid_* and sparse_* columns.
+  d <- data.frame(id = c("A", "B"), Genes = c("G1", "G2"),
+                  logFC_x.over.y = c(1, 2), adj.P.Val_x.over.y = c(0.01, 0.2),
+                  stringsAsFactors = FALSE)
+  for (i in 1:5) d[[sprintf("Intensity.s%02d", i)]] <- runif(2)
+  for (i in 1:6) d[[sprintf("Ori.s%02d",       i)]] <- runif(2)
+  for (i in 1:4) d[[sprintf("n_valid_g%d",     i)]] <- i
+  d$PTM_canonical_position <- c(1, 2)
+
+  g <- ov_intensity_prefix_groups(d)
+  expect_equal(names(g)[1:2], c("Ori.", "Intensity."))   # largest block first
+  expect_equal(lengths(g)[["Ori."]],       6L)
+  expect_equal(lengths(g)[["Intensity."]], 5L)
+  expect_false("PTM_canonical_position" %in% unlist(g))  # singleton, not a block
+})
+
+test_that("every proposed prefix actually selects its own block", {
+  d <- sim_omics(n_features = 4)
+  for (pre in names(ov_intensity_prefix_groups(d))) {
+    got <- ov_detect_columns(d, paste0("^", pre))$intensity_cols
+    expect_gt(length(got), 0)
+  }
+})
+
+test_that("prefix groups ignore blocks smaller than min_size", {
+  d <- data.frame(id = "A", Genes = "G",
+                  Foo.a = 1, Foo.b = 2,          # only 2 -> below default 3
+                  Bar.a = 1, Bar.b = 2, Bar.c = 3,
+                  stringsAsFactors = FALSE)
+  expect_equal(names(ov_intensity_prefix_groups(d)), "Bar.")
+})
+
+test_that("prefix groups return an empty list when nothing groups", {
+  d <- data.frame(id = "A", Genes = "G", alpha = 1, beta = 2,
+                  stringsAsFactors = FALSE)
+  expect_length(ov_intensity_prefix_groups(d), 0)
+  expect_length(ov_intensity_prefix_groups(sim_no_comparisons()[, c("id", "Genes")]), 0)
+})

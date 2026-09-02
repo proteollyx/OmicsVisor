@@ -335,24 +335,38 @@ server <- function(input, output, session) {
       ))
 
     cand   <- ov_intensity_candidates(raw_file())
-    prefix <- ov_common_prefix(utils::head(cand, 50))
+    groups <- ov_intensity_prefix_groups(raw_file())
 
     div(
       style = paste("color:#8a4b00; font-size:0.85em; margin:-6px 0 6px 0;",
                     "border-left:3px solid #f0ad4e; padding-left:8px;"),
       tags$b("No intensity columns matched."),
-      if (length(cand) == 0) {
-        span(" No numeric sample columns were detected in this file.")
-      } else {
+
+      if (length(groups) > 0) {
+        # Offer the largest blocks of similarly-named numeric columns. These
+        # are the sample blocks; listing loose column names instead buries
+        # them among PTM_*/n_valid_*/sparse_* on wide tables.
         tagList(
-          sprintf(" %d numeric column%s look like sample intensities, e.g.:",
+          " This file has these blocks of sample-like columns:",
+          tags$ul(
+            style = "margin:4px 0 4px 0; padding-left:18px;",
+            lapply(utils::head(names(groups), 3), function(pre) tags$li(
+              tags$code(paste0("^", pre)),
+              sprintf(" \u2014 %d columns (e.g. %s)",
+                      length(groups[[pre]]), groups[[pre]][1])
+            ))
+          ),
+          "Copy one into the box above."
+        )
+      } else if (length(cand) > 0) {
+        tagList(
+          sprintf(" %d numeric column%s look like sample intensities, e.g.: ",
                   length(cand), if (length(cand) == 1) "" else "s"),
           tags$code(paste(utils::head(cand, 3), collapse = ", ")),
-          if (nzchar(prefix))
-            tagList(" Try ", tags$code(paste0("^", prefix)), ".")
-          else
-            " Type a pattern above that matches them."
+          " Type a pattern above that matches them."
         )
+      } else {
+        span(" No numeric sample columns were detected in this file.")
       }
     )
   })

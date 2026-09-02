@@ -39,7 +39,12 @@ it uncovered across the eighteen modules.
   preset — Perseus and some MaxQuant exports name sample columns plainly
   (`ctr_PeC_A`) — which left the Heatmap, PCA, Boxplot and Correlation tabs
   silently empty with no indication why
-- `ov_intensity_candidates()` and `ov_common_prefix()` helpers behind that hint
+- `ov_intensity_candidates()`, `ov_intensity_prefix_groups()` and
+  `ov_common_prefix()` helpers behind that hint. The hint ranks *blocks* of
+  similarly-named numeric columns rather than listing loose candidates: on a
+  phospho peptide-collapse export with 101 columns it proposes `^Ori.` (20)
+  and `^Intensity.` (19) instead of burying them among `PTM_*`, `n_valid_*`
+  and `sparse_*`
 
 ### Fixed
 - **`%||%` returned the fallback for any vector of length > 1.** The operator
