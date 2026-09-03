@@ -9,6 +9,15 @@ must always match it (enforced by `tests/testthat/test-version.R`).
 
 ---
 
+## [Unreleased]
+
+### Changed
+- Losslessly re-encoded the favicon PNGs (401.6 KB -> 346.4 KB, -13.7%). Every
+  file was verified pixel-identical to its original before replacement. Further
+  reduction would require lossy colour quantisation: the source icon holds
+  64,487 distinct RGBA colours, so it is photographic rather than flat, and a
+  palette conversion would not be lossless.
+
 ## [1.1.1] - 2026-09-03
 
 ### Added
