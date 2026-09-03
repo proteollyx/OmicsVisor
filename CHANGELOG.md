@@ -11,7 +11,16 @@ must always match it (enforced by `tests/testthat/test-version.R`).
 
 ## [Unreleased]
 
+### Added
+- `.zenodo.json`: explicit Zenodo deposition metadata, so the DOI record carries
+  the correct creator affiliation, licence and description rather than being
+  inferred. Zenodo prefers this file over `CITATION.cff` when both are present.
+
 ### Changed
+- README: MDC named as the affiliation in the citation block and in a dedicated
+  *Author and affiliation* section, per the MDC Rules of Good Scientific
+  Practice (2023), which require the MDC to be named where intellectual work
+  was developed at the MDC or using MDC resources.
 - Losslessly re-encoded the favicon PNGs (401.6 KB -> 346.4 KB, -13.7%). Every
   file was verified pixel-identical to its original before replacement. Further
   reduction would require lossy colour quantisation: the source icon holds

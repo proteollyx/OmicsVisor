@@ -1,0 +1,33 @@
+{
+  "title": "OmicsVisor: an interactive Shiny application for exploring differential omics results",
+  "upload_type": "software",
+  "access_right": "open",
+  "license": "MIT",
+  "creators": [
+    {
+      "name": "Popp, Oliver",
+      "affiliation": "Technology Platform Proteomics, Max Delbrück Center for Molecular Medicine in the Helmholtz Association (MDC), Berlin, Germany"
+    }
+  ],
+  "description": "<p><strong>OmicsVisor</strong> is a modular R Shiny application for interactive exploration and visualisation of differential omics analysis results (proteomics, transcriptomics and related data types).</p><p>A single ID-keyed results table &mdash; features in rows, pairwise comparisons and sample intensities in columns &mdash; drives eighteen linked views: data overview, volcano plot, donut plot, UpSet plot, heatmap, PCA/UMAP, publication-quality volcano export, logFC scatter, Venn/UpSet list comparison, ID list generation from gene symbols or GMT files, box/violin/crossbar plots, a regex utility, feature correlation, GCT export for GSEA/MSigDB, and rank-based 1D enrichment analysis.</p><p>The application is ID-driven: every module keys off the same <code>id</code> column, so a list of identifiers copied from one view can be pasted directly into another.</p><p>Developed at the Max Delbr&uuml;ck Center for Molecular Medicine in the Helmholtz Association (MDC), Berlin.</p><p><strong>Note on assets:</strong> the MIT licence covers the source code. The interface images are excluded from the licence grant; see ASSETS.md in the repository for file-by-file provenance.</p>",
+  "keywords": [
+    "proteomics",
+    "transcriptomics",
+    "omics",
+    "data visualisation",
+    "differential expression",
+    "shiny",
+    "R",
+    "research software",
+    "mass spectrometry",
+    "gene set enrichment"
+  ],
+  "related_identifiers": [
+    {
+      "identifier": "https://github.com/proteollyx/OmicsVisor",
+      "relation": "isSupplementTo",
+      "scheme": "url"
+    }
+  ],
+  "language": "eng"
+}

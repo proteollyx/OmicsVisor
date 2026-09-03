@@ -151,7 +151,8 @@ If you use OmicsVisor in your research, please cite it. Machine-readable
 metadata is in [CITATION.cff](CITATION.cff).
 
 > Popp, O. (2026). *OmicsVisor: an interactive Shiny application for exploring
-> differential omics results* (v1.1.0). GitHub.
+> differential omics results.* Technology Platform Proteomics, Max Delbrück
+> Center for Molecular Medicine in the Helmholtz Association (MDC), Berlin.
 > https://github.com/proteollyx/OmicsVisor
 
 ---
@@ -184,8 +185,13 @@ OmicsVisor under the MIT licence.
 
 ---
 
-## Author
+## Author and affiliation
 
-Oliver Popp — [oliver.popp@mdc-berlin.de](mailto:oliver.popp@mdc-berlin.de)
+**Oliver Popp** — [oliver.popp@mdc-berlin.de](mailto:oliver.popp@mdc-berlin.de)
+
 Technology Platform Proteomics
-Max Delbrück Center for Molecular Medicine (MDC), Berlin
+**Max Delbrück Center for Molecular Medicine in the Helmholtz Association (MDC)**
+Robert-Rössle-Straße 10, 13125 Berlin, Germany
+
+OmicsVisor was developed at the MDC using MDC resources. Please name the MDC as
+the affiliation when citing or reusing it.
