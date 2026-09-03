@@ -158,14 +158,13 @@ metadata is in [CITATION.cff](CITATION.cff).
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE). This covers the source code.
 
-### Image credits
-
-The decorative interface images in `www/` (`omics_icon3.png`,
-`hedgehog_1DE.png`) were generated with OpenAI ChatGPT. Purely AI-generated
-images may not be eligible for copyright protection, so they are provided
-as-is and are **not** covered by the MIT licence above.
+The image assets in `www/` are **not** covered by the MIT licence: the
+application icon, the 1D Enrichment illustration and the favicons derived from
+the icon were generated with OpenAI ChatGPT, and no copyright is claimed over
+them. See [ASSETS.md](ASSETS.md) for the file-by-file provenance and what that
+means if you reuse this repository.
 
 ---
 

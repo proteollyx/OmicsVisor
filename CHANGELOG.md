@@ -9,6 +9,28 @@ must always match it (enforced by `tests/testthat/test-version.R`).
 
 ---
 
+## [1.1.1] - 2026-09-03
+
+### Added
+- `ASSETS.md`: file-by-file provenance for the image assets, recording that the
+  application icon, the 1D Enrichment illustration and the six favicons derived
+  from the icon were generated with OpenAI ChatGPT, are excluded from the MIT
+  grant, and carry no asserted copyright. The favicons had not previously been
+  identified as derived from the AI-generated icon.
+- README: *Development and AI assistance* section, recording that early
+  development was assisted by OpenAI ChatGPT and the v1.1.0 test suite and
+  fixes by Anthropic Claude, with every change reviewed and tested by the
+  author
+
+### Changed
+- Resized the two interface images to the resolution at which they are
+  actually displayed (`omics_icon3.png` 1024x1024 -> 256x256,
+  `hedgehog_1DE.png` 1536x1024 -> 640x426). They were 82% of the deployment
+  bundle while being rendered at 40 px and ~320 px respectively; the bundle
+  drops from 3.58 MB to 1.03 MB with no visible change. Full-resolution
+  originals remain in the git history.
+- `CITATION.cff`: author affiliation now names Technology Platform Proteomics
+
 ## [1.1.0] - 2026-09-01
 
 First public release. Adds a full automated test suite and fixes every defect
