@@ -75,6 +75,22 @@ ui <- page_sidebar(
       });
     ')),
 
+    # Startup notice: shown once per browser, remembered in localStorage.
+    # The key is versioned - bump the suffix to make the notice reappear for
+    # everyone after a material change to its wording.
+    tags$script(HTML("
+      $(document).on('shiny:connected', function() {
+        var seen = 'no';
+        try {
+          if (window.localStorage.getItem('omicsvisor_notice_v1') === 'yes') seen = 'yes';
+        } catch (e) { seen = 'no'; }   // storage blocked -> show it, fail safe
+        Shiny.setInputValue('ov_notice_seen', seen);
+      });
+      Shiny.addCustomMessageHandler('ovMarkNoticeSeen', function(x) {
+        try { window.localStorage.setItem('omicsvisor_notice_v1', 'yes'); } catch (e) {}
+      });
+    ")),
+
     # Favicon
     tags$link(rel = "shortcut icon", href = "favicon_io/favicon.ico"),
     tags$link(rel = "icon", type = "image/png", sizes = "16x16",
@@ -254,20 +270,30 @@ ui <- page_sidebar(
 # ── Server ──────────────────────────────────────────────────────────────────
 server <- function(input, output, session) {
 
-  observeEvent(TRUE, {
+  # Show the startup notice only if this browser has not acknowledged it.
+  # If localStorage is unavailable (private browsing, blocked storage) the
+  # client reports "no" and the notice is shown - the safe direction for a
+  # disclaimer.
+  observeEvent(input$ov_notice_seen, once = TRUE, {
+    if (!identical(input$ov_notice_seen, "no")) return()
     shinyalert::shinyalert(
-      title = "OmicsVisor – Important Notice",
+      title = "OmicsVisor \u2013 Please read",
       text  = paste(
-        "OmicsVisor enables rapid exploration of differential analysis results and supports the generation of a wide range of figures.",
+        "OmicsVisor is an exploration tool. It does not perform quality control, filtering, imputation or statistics \u2014 all of that happens in the upstream analysis that produced your input table.",
         "",
-        "While the output may in principle be suitable for publication, users are kindly advised to consult the Proteomics Technology Platform for confirmation prior to submission.",
+        "Figures are export-ready, but before using one in a manuscript, presentation or any public document, please have it checked by whoever performed your differential analysis. For MDC users that is the Technology Platform Proteomics.",
+        "",
+        "Data you upload is processed on this server. Please do not upload sensitive or personally identifiable information.",
+        "",
+        "Full details on the Disclaimer tab.",
         sep = "\n"
       ),
       type = "info",
       showConfirmButton = TRUE,
-      confirmButtonText = "I understand"
+      confirmButtonText = "I understand",
+      callbackR = function(value) session$sendCustomMessage("ovMarkNoticeSeen", TRUE)
     )
-  }, once = TRUE)
+  })
 
   # Sync preset dropdown → custom regex field
   observeEvent(input$int_regex_preset, {

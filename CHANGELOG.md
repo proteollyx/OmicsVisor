@@ -17,6 +17,34 @@ must always match it (enforced by `tests/testthat/test-version.R`).
   additionally receives its own version DOI. Added as a README badge, in the
   citation block, and as the `doi:` field of `CITATION.cff`.
 
+## [1.1.3] - 2026-09-08
+
+### Changed
+- **The startup notice now appears once per browser instead of on every page
+  load.** It was fired by `observeEvent(TRUE, ..., once = TRUE)`, which is once
+  per *session* — so a daily user saw it every time and had long stopped
+  reading it. A `localStorage` flag now records the acknowledgement. The gate
+  fails towards *showing* the notice: if storage is blocked (private browsing)
+  the client reports "not seen" and the notice appears. The key is versioned so
+  it can be made to reappear after a material change of wording.
+- **Reworded the startup notice for a mixed audience.** The application is now
+  reachable without a login, so "consult the Proteomics Technology Platform"
+  meant nothing to an external user. It now names the substantive limitation
+  (no quality control, filtering, imputation or statistics — those happen
+  upstream), keeps the MDC-specific pointer for MDC users, and adds a line
+  about uploaded data being processed on the server.
+- **Rewrote the Disclaimer tab.** It described the tool as "still in its beta
+  phase" and referred to the author in the third person, both written for an
+  internal audience before the tool was public. It now also carries the licence,
+  the Zenodo DOI, a note that the interface images sit outside the MIT grant,
+  and a version footer read from `version.R` so it cannot go stale.
+
+### Fixed
+- **The Disclaimer tab displayed literal markdown.** Its numbered points were
+  written as `p("1. **No Guarantee of Accuracy**: ...")`, but `p()` does not
+  process markdown, so the asterisks were shown verbatim in the browser.
+  Replaced with `tags$ol()` and `strong()`.
+
 ## [1.1.2] - 2026-09-08
 
 Licensing and metadata release, following review by MDC Research Data
