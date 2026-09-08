@@ -116,3 +116,17 @@ test_that("LICENSE names both the author and the MDC", {
   expect_match(txt, "Oliver Popp")
   expect_match(txt, "Max Delbr")
 })
+
+test_that("the DOI is consistent between README and CITATION.cff", {
+  cff <- readLines(file.path(OV_ROOT, "CITATION.cff"), warn = FALSE)
+  doi_line <- grep("^doi:", cff, value = TRUE)
+  skip_if(length(doi_line) == 0, "no DOI registered yet")
+
+  doi <- trimws(sub("^doi:", "", doi_line[1]))
+  expect_match(doi, "^10\\.5281/zenodo\\.[0-9]+$")
+
+  readme <- paste(readLines(file.path(OV_ROOT, "README.md"), warn = FALSE),
+                  collapse = "\n")
+  expect_true(grepl(doi, readme, fixed = TRUE),
+              info = "CITATION.cff DOI does not appear in README.md")
+})

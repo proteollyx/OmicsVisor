@@ -2,6 +2,7 @@
 
 [![tests](https://github.com/proteollyx/OmicsVisor/actions/workflows/tests.yml/badge.svg)](https://github.com/proteollyx/OmicsVisor/actions/workflows/tests.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22660844.svg)](https://doi.org/10.5281/zenodo.22660844)
 
 **OmicsVisor** is a modular R Shiny application for interactive exploration and
 visualisation of differential omics analysis results (proteomics,
@@ -153,7 +154,11 @@ metadata is in [CITATION.cff](CITATION.cff).
 > Popp, O. (2026). *OmicsVisor: an interactive Shiny application for exploring
 > differential omics results.* Technology Platform Proteomics, Max Delbrück
 > Center for Molecular Medicine in the Helmholtz Association (MDC), Berlin.
-> https://github.com/proteollyx/OmicsVisor
+> Zenodo. https://doi.org/10.5281/zenodo.22660844
+
+The DOI above is the *concept* DOI: it always resolves to the newest version.
+Each release also receives its own version-specific DOI, listed on the Zenodo
+record, if you need to cite an exact version.
 
 ---
 
