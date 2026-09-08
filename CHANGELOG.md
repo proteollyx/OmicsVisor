@@ -9,7 +9,15 @@ must always match it (enforced by `tests/testthat/test-version.R`).
 
 ---
 
-## [Unreleased]
+## [1.1.2] - 2026-09-08
+
+Licensing and metadata release, following review by MDC Research Data
+Management and Technology Transfer.
+
+### Added
+- `.zenodo.json`: explicit Zenodo deposition metadata, so the DOI record carries
+  the correct creator affiliation, licence and description rather than being
+  inferred. Zenodo prefers this file over `CITATION.cff` when both are present.
 
 ### Changed
 - `LICENSE`: the copyright line now names the Max Delbrück Center alongside the
@@ -20,13 +28,6 @@ must always match it (enforced by `tests/testthat/test-version.R`).
   MDC Research Data Management and Technology Transfer — open publication under
   MIT confirmed appropriate, AI-generated images to stay outside the licence
   grant.
-
-### Added
-- `.zenodo.json`: explicit Zenodo deposition metadata, so the DOI record carries
-  the correct creator affiliation, licence and description rather than being
-  inferred. Zenodo prefers this file over `CITATION.cff` when both are present.
-
-### Changed
 - README: MDC named as the affiliation in the citation block and in a dedicated
   *Author and affiliation* section, per the MDC Rules of Good Scientific
   Practice (2023), which require the MDC to be named where intellectual work

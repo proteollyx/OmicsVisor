@@ -94,3 +94,25 @@ test_that("CITATION.cff carries the same version as version.R", {
   rel <- gsub("[\"']", "", trimws(rel))
   expect_equal(rel, ov_release_date)
 })
+
+test_that(".zenodo.json is valid and agrees with the licence and affiliation", {
+  z <- file.path(OV_ROOT, ".zenodo.json")
+  skip_if_not(file.exists(z), ".zenodo.json not present")
+  skip_if_not_installed("jsonlite")
+
+  d <- jsonlite::fromJSON(z, simplifyVector = FALSE)
+  expect_equal(d$license,     "MIT")
+  expect_equal(d$upload_type, "software")
+  expect_equal(d$access_right, "open")
+  expect_gt(length(d$creators), 0)
+
+  # the MDC must be named as affiliation (Rules of Good Scientific Practice 2023)
+  expect_match(d$creators[[1]]$affiliation, "Max Delbr", fixed = FALSE)
+  expect_match(d$creators[[1]]$name, "Popp")
+})
+
+test_that("LICENSE names both the author and the MDC", {
+  txt <- paste(readLines(file.path(OV_ROOT, "LICENSE"), warn = FALSE), collapse = " ")
+  expect_match(txt, "Oliver Popp")
+  expect_match(txt, "Max Delbr")
+})
