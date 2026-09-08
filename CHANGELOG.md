@@ -9,15 +9,13 @@ must always match it (enforced by `tests/testthat/test-version.R`).
 
 ---
 
-## [Unreleased]
+## [1.1.3] - 2026-09-08
 
 ### Added
 - Zenodo archiving and a citable DOI. The concept DOI
   `10.5281/zenodo.22660844` always resolves to the newest release; each release
   additionally receives its own version DOI. Added as a README badge, in the
   citation block, and as the `doi:` field of `CITATION.cff`.
-
-## [1.1.3] - 2026-09-08
 
 ### Changed
 - **The startup notice now appears once per browser instead of on every page
