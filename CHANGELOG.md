@@ -11,6 +11,16 @@ must always match it (enforced by `tests/testthat/test-version.R`).
 
 ## [Unreleased]
 
+### Changed
+- `LICENSE`: the copyright line now names the Max Delbrück Center alongside the
+  author. Copyright in software written by MDC staff in the course of their
+  duties rests with the institution; MDC Technology Transfer advised recording
+  it this way.
+- `ASSETS.md`: records the outcome of the September 2026 licensing review by
+  MDC Research Data Management and Technology Transfer — open publication under
+  MIT confirmed appropriate, AI-generated images to stay outside the licence
+  grant.
+
 ### Added
 - `.zenodo.json`: explicit Zenodo deposition metadata, so the DOI record carries
   the correct creator affiliation, licence and description rather than being

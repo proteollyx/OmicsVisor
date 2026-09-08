@@ -47,6 +47,28 @@ an image, and contains no creative content.
 
 ---
 
+## Licensing review
+
+The licensing position was reviewed at the MDC in September 2026:
+
+- **Research Data Management** confirmed that open publication of research
+  software is consistent with the MDC Policy Framework for Research Data
+  Management (2021), which includes software and code within its definition of
+  research data and points to licences approved by the Open Source Initiative,
+  and with the MDC Rules of Good Scientific Practice (2023), which apply the
+  FAIR principles to research software and its source code. MIT is
+  OSI-approved.
+- **Technology Transfer / Innovations** confirmed there is no patentable
+  subject matter and no commercial potential, that no third-party material is
+  involved, and that publishing under an open licence is therefore fine. They
+  also recommended keeping the AI-generated images outside the licence grant,
+  as documented above.
+
+Copyright in software written by MDC staff in the course of their duties rests
+with the MDC; the `LICENSE` file names both the author and the institution.
+
+---
+
 ## Everything else
 
 All source code in this repository — `app.R`, `helper_functions.R`,
