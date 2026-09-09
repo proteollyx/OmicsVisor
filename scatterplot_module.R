@@ -66,11 +66,14 @@ scatterplot_server <- function(id, data) {
     adj_x <- gsub("logFC", "adj.P.Val", input$x_logfc)
     adj_y <- gsub("logFC", "adj.P.Val", input$y_logfc)
     
+    hit_x <- ov_is_hit(df[[input$x_logfc]], df[[adj_x]],
+                       input$logfc_cutoff, input$pval_cutoff)
+    hit_y <- ov_is_hit(df[[input$y_logfc]], df[[adj_y]],
+                       input$logfc_cutoff, input$pval_cutoff)
     df$Significance <- "None"
-    df$Significance[df[[adj_x]] < input$pval_cutoff & abs(df[[input$x_logfc]]) > input$logfc_cutoff] <- "Exp1"
-    df$Significance[df[[adj_y]] < input$pval_cutoff & abs(df[[input$y_logfc]]) > input$logfc_cutoff] <- "Exp2"
-    df$Significance[df[[adj_x]] < input$pval_cutoff & abs(df[[input$x_logfc]]) > input$logfc_cutoff &
-                      df[[adj_y]] < input$pval_cutoff & abs(df[[input$y_logfc]]) > input$logfc_cutoff] <- "Both"
+    df$Significance[hit_x]          <- "Exp1"
+    df$Significance[hit_y]          <- "Exp2"
+    df$Significance[hit_x & hit_y]  <- "Both"
     
     highlight_ids <- trimws(unlist(strsplit(input$highlight_ids, ",")))
     df$Label <- ifelse(df$id %in% highlight_ids, df$id, "")

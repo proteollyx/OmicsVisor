@@ -63,12 +63,11 @@ donut_plot_server <- function(id, data) {
         return(list(up = character(0), down = character(0),
                     all_ids = df$id, title = title))
 
-      # !is.na() guards are essential: NA < 0.05 is NA, and subsetting with NA
-      # inserts NA elements that length() then counts as hits.
-      valid <- !is.na(lfc) & !is.na(adjp) & adjp < pval_cut
+      # ov_is_hit() carries the NA/out-of-range guards: NA < 0.05 is NA, and
+      # subsetting with NA inserts elements that length() then counts as hits.
       list(
-        up      = df$id[valid & lfc >  logfc_cut],
-        down    = df$id[valid & lfc < -logfc_cut],
+        up      = df$id[ov_is_hit(lfc, adjp, logfc_cut, pval_cut, direction = "up")],
+        down    = df$id[ov_is_hit(lfc, adjp, logfc_cut, pval_cut, direction = "down")],
         all_ids = df$id,
         title   = title
       )

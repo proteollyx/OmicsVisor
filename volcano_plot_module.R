@@ -138,8 +138,9 @@ volcano_plot_server <- function(id, data) {
     df <- data()$data
     
     # Mark significance
-    df$significant <- abs(df[[cols$logFC]]) > input$logfc_cutoff & 
-      df[[cols$adjP]] < input$pval_cutoff
+    # shared hit rule - see ov_is_hit() in helper_functions.R
+    df$significant <- ov_is_hit(df[[cols$logFC]], df[[cols$adjP]],
+                                input$logfc_cutoff, input$pval_cutoff)
     
     # Generate labels if label_columns are selected
     if (!is.null(input$label_columns) && length(input$label_columns) > 0) {
@@ -201,27 +202,8 @@ volcano_plot_server <- function(id, data) {
     
     df <- data()$data
     
-    # Positive side
-    # pos_ids <- df[
-    #   df[[cols$logFC]] > 0 & 
-    #     df[[cols$adjP]] < input$pval_cutoff & 
-    #     abs(df[[cols$logFC]]) > input$logfc_cutoff, 
-    #   "id"
-    # ]
-    
-    # Negative side
-    # neg_ids <- df[
-    #   df[[cols$logFC]] < 0 & 
-    #     df[[cols$adjP]] < input$pval_cutoff & 
-    #     abs(df[[cols$logFC]]) > input$logfc_cutoff, 
-    #   "id"
-    # ]
-    
-    valid_rows <- 
-      !is.na(df[[cols$logFC]]) &
-      !is.na(df[[cols$adjP]]) &
-      df[[cols$adjP]] < input$pval_cutoff &
-      abs(df[[cols$logFC]]) > input$logfc_cutoff
+    valid_rows <- ov_is_hit(df[[cols$logFC]], df[[cols$adjP]],
+                            input$logfc_cutoff, input$pval_cutoff)
     
     id_lists$pos <- df[valid_rows & df[[cols$logFC]] > 0, "id"]
     id_lists$neg <- df[valid_rows & df[[cols$logFC]] < 0, "id"]

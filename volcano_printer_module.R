@@ -112,9 +112,8 @@ volcano_printer_server <- function(id, data) {
     # Significance cutoff. A missing logFC or adj.P must read as "not
     # significant" — leaving it NA propagates into label_display below and the
     # plot then carries NA labels.
-    df$significant <- !is.na(df[[cols$logFC]]) & !is.na(df[[cols$adjP]]) &
-      abs(df[[cols$logFC]]) > input$logfc_cutoff &
-      df[[cols$adjP]] < input$pval_cutoff
+    df$significant <- ov_is_hit(df[[cols$logFC]], df[[cols$adjP]],
+                                input$logfc_cutoff, input$pval_cutoff)
 
     # If user typed IDs
     selected_ids <- trimws(strsplit(input$id_selection %||% "", ",")[[1]])

@@ -157,20 +157,16 @@ upset_plot_server <- function(id, data) {
       ac <- adj_cols[i]
       
       v <- df[[lf]]
-      if (direction == "both") {
-        hits <- abs(v) >= logfc_cut
-      } else if (direction == "up") {
-        hits <- v >= logfc_cut
-      } else {
-        hits <- v <= -logfc_cut
-      }
-      
+      # shared hit rule - see ov_is_hit() in helper_functions.R
       if (!is.na(ac)) {
-        pv <- df[[ac]]
-        hits <- hits & is.finite(pv) & pv <= adjp_cut
+        hits <- ov_is_hit(v, df[[ac]], logfc_cut, adjp_cut, direction = direction)
+      } else {
+        # No adjusted-P partner: fold change alone. Passing padj = 0 with a
+        # cutoff of 1 makes the p-test vacuous while keeping the same validity
+        # and direction handling as every other module.
+        # TODO (audit OV-VIZ-02): this should fail closed instead.
+        hits <- ov_is_hit(v, rep(0, length(v)), logfc_cut, 1, direction = direction)
       }
-      
-      hits[is.na(hits)] <- FALSE
       mat_list[[lf]] <- hits
     }
     

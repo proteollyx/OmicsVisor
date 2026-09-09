@@ -9,6 +9,32 @@ must always match it (enforced by `tests/testthat/test-version.R`).
 
 ---
 
+## [Unreleased]
+
+Audit remediation, Release A. Accumulating until the correctness guards are complete.
+
+### Changed
+- **One shared definition of "hit", used by every module** (audit OV-VIZ-07).
+  Each module previously implemented its own threshold check and they disagreed:
+  UpSet used `>=`/`<=` while Volcano, Volcano Printer, Donut and the logFC Scatter
+  used `>`/`<`. A feature sitting exactly on a cutoff was therefore a hit in one
+  view and not in another. All five now call `ov_is_hit()` in
+  `helper_functions.R`.
+- **Boundaries are now inclusive** (`|logFC| >= cutoff`, `adj.P <= cutoff`). This
+  matches how the cutoffs are described in the interface and printed in plot
+  subtitles. Four of the five modules were previously exclusive, so **hit counts
+  can change for features sitting exactly on a cutoff** — normally a handful at
+  most, and only at the boundary itself. This is a correctness fix, not a
+  silent change of behaviour.
+- `ov_is_hit()` also centralises the validity guards: missing, non-finite, and
+  out-of-range values never count as hits, and an adjusted p-value outside
+  `[0, 1]` is treated as invalid rather than compared. The returned vector is
+  never `NA`, since callers index with it.
+
+### Removed
+- Dead commented-out ID-selection code in the Volcano module, which encoded the
+  old exclusive convention and would have misled a future reader.
+
 ## [1.1.4] - 2026-09-09
 
 Audit remediation, item A1: transparency. First of the changes arising from the

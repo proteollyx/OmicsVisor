@@ -106,6 +106,59 @@ detect_comparisons <- function(col_names) {
 }
 
 
+# ── Hit calling ──────────────────────────────────────────────────────────────
+
+#' Decide which features count as hits.
+#'
+#' The single definition of "significant" used by every module. Before this
+#' existed each module implemented its own threshold check, and they disagreed:
+#' UpSet used >= and <= while Volcano, Volcano Printer, Donut and the logFC
+#' Scatter used > and <. A feature sitting exactly on a cutoff was therefore a
+#' hit in one view and not in another (audit finding OV-VIZ-07).
+#'
+#' Boundaries are inclusive by default: "adj.P <= 0.05" is how the cutoffs are
+#' described in the interface and printed in plot subtitles, so the code now
+#' matches the wording.
+#'
+#' Missing, infinite and out-of-range values never count as hits. An adjusted
+#' p-value outside [0, 1] is not a probability, so it is treated as invalid
+#' rather than silently compared.
+#'
+#' @param logfc      numeric vector of log fold changes
+#' @param padj       numeric vector of adjusted p-values
+#' @param fc_cut     absolute log fold-change threshold
+#' @param padj_cut   adjusted p-value threshold
+#' @param inclusive  TRUE for >= / <=, FALSE for > / <
+#' @param direction  "both", "up" or "down"
+#' @return logical vector, never NA
+ov_is_hit <- function(logfc, padj, fc_cut, padj_cut,
+                      inclusive = TRUE,
+                      direction = c("both", "up", "down")) {
+  direction <- match.arg(direction)
+
+  logfc <- suppressWarnings(as.numeric(logfc))
+  padj  <- suppressWarnings(as.numeric(padj))
+
+  if (length(logfc) == 0L || length(padj) == 0L) return(logical(0))
+  if (length(padj) == 1L)  padj  <- rep(padj,  length(logfc))
+  if (length(logfc) == 1L) logfc <- rep(logfc, length(padj))
+
+  # a p-value outside [0, 1] is not a probability; refuse to threshold on it
+  valid <- is.finite(logfc) & is.finite(padj) & padj >= 0 & padj <= 1
+
+  fc_ok <- switch(
+    direction,
+    both = if (inclusive) abs(logfc) >= fc_cut else abs(logfc) > fc_cut,
+    up   = if (inclusive) logfc >=  fc_cut     else logfc >  fc_cut,
+    down = if (inclusive) logfc <= -fc_cut     else logfc < -fc_cut
+  )
+  p_ok <- if (inclusive) padj <= padj_cut else padj < padj_cut
+
+  out <- valid & fc_ok & p_ok
+  out[is.na(out)] <- FALSE
+  out
+}
+
 # ── Upload handling ──────────────────────────────────────────────────────────
 
 #' Read an uploaded results table.
