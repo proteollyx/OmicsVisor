@@ -64,6 +64,12 @@ The licensing position was reviewed at the MDC in September 2026:
   also recommended keeping the AI-generated images outside the licence grant,
   as documented above.
 
+Technology Transfer subsequently confirmed the outcome explicitly: publication
+under a fully open licence is appropriate, there is no possible future patent and no
+third-party material involved, and they saw no reason to restrict commercial use. They
+also noted that because the MDC owns the intellectual property, a non-commercial
+restriction would not have limited the MDC's own use in any case.
+
 Copyright in software written by MDC staff in the course of their duties rests
 with the MDC; the `LICENSE` file names both the author and the institution.
 

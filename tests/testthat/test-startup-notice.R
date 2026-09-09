@@ -42,6 +42,16 @@ test_that("the notice text states the substantive limitation", {
     expect_true(grepl(phrase, s, fixed = TRUE), info = phrase)
 })
 
+test_that("the notice states there is no guarantee of correctness", {
+  s <- app_src()
+  expect_true(grepl("no guarantee the output is correct", s, fixed = TRUE))
+})
+
+test_that("the notice discloses that the code was written with AI assistance", {
+  s <- app_src()
+  expect_true(grepl("written with AI assistance", s, fixed = TRUE))
+})
+
 
 # ── Disclaimer tab ───────────────────────────────────────────────────────────
 
@@ -131,4 +141,38 @@ test_that("the notice stays hidden when the browser has already seen it", {
     session$flushReact()
   }))
   expect_equal(calls$n, 0L)
+})
+
+
+# ── Correctness and AI-assistance disclosure on the Disclaimer tab ───────────
+# The tab previously disclosed only that the interface *images* were
+# AI-generated; the code disclosure lived in the README, which a user of the
+# deployed app never sees. Both statements must now be present in the UI.
+
+test_that("the Disclaimer leads with an unambiguous no-guarantee statement", {
+  html <- as.character(disclaimer_ui("disclaimer_module"))
+  expect_true(grepl("No guarantee of correctness", html, fixed = TRUE))
+  expect_true(grepl("no guarantee that OmicsVisor produces correct output",
+                    html, fixed = TRUE))
+  # it must come before the detail sections, not be buried at the end
+  expect_lt(regexpr("No guarantee of correctness", html, fixed = TRUE),
+            regexpr("Data you upload", html, fixed = TRUE))
+})
+
+test_that("the Disclaimer discloses AI assistance in the code, naming the tools", {
+  html <- as.character(disclaimer_ui("disclaimer_module"))
+  expect_true(grepl("How this software was built", html, fixed = TRUE))
+  expect_true(grepl("generative AI", html, fixed = TRUE))
+  expect_true(grepl("ChatGPT", html, fixed = TRUE))
+  expect_true(grepl("Claude",  html, fixed = TRUE))
+  # the disclosure is paired with the evidence, not left bare
+  expect_true(grepl("reviewed, run and tested", html, fixed = TRUE))
+  expect_true(grepl("test suite", html, fixed = TRUE))
+})
+
+test_that("the no-guarantee point is not duplicated in the summary list", {
+  html <- as.character(disclaimer_ui("disclaimer_module"))
+  # the old list item wording should be gone, replaced by a pointer
+  expect_false(grepl("without warranty of accuracy or fitness for a", html, fixed = TRUE))
+  expect_true(grepl("most important point here", html, fixed = TRUE))
 })

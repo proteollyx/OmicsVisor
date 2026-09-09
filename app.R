@@ -285,6 +285,8 @@ server <- function(input, output, session) {
         "",
         "Data you upload is processed on this server. Please do not upload sensitive or personally identifiable information.",
         "",
+        "There is no guarantee the output is correct \u2014 please check anything that matters against your upstream analysis. Parts of this tool were written with AI assistance; see the Disclaimer tab.",
+        "",
         "Full details on the Disclaimer tab.",
         sep = "\n"
       ),

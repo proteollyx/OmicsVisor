@@ -7,6 +7,20 @@ disclaimer_ui <- function(id) {
   tagList(
     h3("Disclaimer"),
 
+    h4("No guarantee of correctness"),
+    p(strong("There is no guarantee that OmicsVisor produces correct output."),
+      " It is a research tool provided as is, without warranty of accuracy or of
+       fitness for any particular purpose."),
+    p("Treat every number, figure and ID list it produces as something to be
+       checked, not as a result. If a finding matters, verify it against the
+       upstream analysis that produced your input table before you rely on it,
+       present it, or publish it."),
+    p("This is not a formality. Bugs have been found in this tool before and will
+       be again — the ",
+      tags$a(href = "https://github.com/proteollyx/OmicsVisor/blob/main/CHANGELOG.md",
+             target = "_blank", "changelog"),
+      " records those that have been fixed."),
+
     h4("What OmicsVisor does, and does not do"),
     p("OmicsVisor is a tool for ", strong("exploring"), " the results of a
        differential omics analysis that has already been performed. It reads a
@@ -29,6 +43,20 @@ disclaimer_ui <- function(id) {
     p("The same applies to ID lists exported from the tool: they reflect the
        cutoffs you set, and cutoffs are a scientific decision."),
 
+    h4("How this software was built"),
+    p("OmicsVisor was designed, developed and tested by Oliver Popp. ",
+      strong("Parts of the code were written with the help of generative AI tools"),
+      " — OpenAI ChatGPT during early development, and Anthropic Claude later,
+       including for the automated test suite and a number of bug fixes."),
+    p("Every change was reviewed, run and tested by the author, and the scientific
+       design decisions are his own. The tool is covered by an automated test suite
+       of around 500 checks that runs on every change; both the suite and the full
+       history are public and can be inspected at ",
+      tags$a(href = "https://github.com/proteollyx/OmicsVisor",
+             target = "_blank", "github.com/proteollyx/OmicsVisor"), "."),
+    p("This is stated so you can weigh it for yourself. It does not change the
+       point above: check the output."),
+
     h4("Data you upload"),
     p("Uploaded files are processed on the server hosting this application.
        Please do not upload sensitive, confidential or personally identifiable
@@ -40,10 +68,8 @@ disclaimer_ui <- function(id) {
 
     h4("In short"),
     tags$ol(
-      tags$li(strong("No guarantee of accuracy."), " OmicsVisor is provided
-        “as is”, without warranty of accuracy or fitness for a
-        particular purpose. Validate results independently before relying on
-        them."),
+      tags$li(strong("No guarantee of correctness."), " See the section at the top
+        of this page — this is the most important point here."),
       tags$li(strong("Exploration, not analysis."), " The tool is not a
         substitute for a considered analysis and should not be the sole basis
         for a conclusion."),

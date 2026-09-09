@@ -9,6 +9,34 @@ must always match it (enforced by `tests/testthat/test-version.R`).
 
 ---
 
+## [1.1.4] - 2026-09-09
+
+Audit remediation, item A1: transparency. First of the changes arising from the
+September 2026 independent quality audit.
+
+### Added
+- **The Disclaimer tab now states plainly that there is no guarantee of correct
+  output.** This was previously one item in a five-point list, phrased as a warranty
+  disclaimer — the form of words readers skim. It is now the first section on the page,
+  says directly that there is no guarantee the tool produces correct output, asks the
+  reader to verify anything that matters against the upstream analysis, and notes that
+  bugs have been found before and are recorded in the changelog.
+- **The Disclaimer tab now discloses that parts of the code were written with
+  generative AI assistance** — OpenAI ChatGPT during early development, Anthropic
+  Claude later, including the test suite and a number of bug fixes. Previously the
+  application disclosed only that the *interface images* were AI-generated; the code
+  disclosure existed solely in the README, which a user of the deployed application
+  never sees. The disclosure is paired with the fact that every change was reviewed and
+  tested and that the ~500-check test suite is public and inspectable.
+- The startup notice carries both points in brief, pointing at the Disclaimer tab.
+
+### Changed
+- `ASSETS.md`: records MDC Technology Transfer's explicit confirmation that publication
+  under a fully open licence is appropriate — no possible future patent, no third-party
+  material, and no reason to restrict commercial use. They also noted that a
+  non-commercial restriction would not have limited the MDC's own use, since the MDC
+  owns the intellectual property.
+
 ## [1.1.3] - 2026-09-08
 
 ### Added
