@@ -30,6 +30,20 @@ Audit remediation, Release A. Accumulating until the correctness guards are comp
   out-of-range values never count as hits, and an adjusted p-value outside
   `[0, 1]` is treated as invalid rather than compared. The returned vector is
   never `NA`, since callers index with it.
+- **Feature Correlation** now uses the same rule. It had the identical
+  inconsistency inside a single expression — `adj.p.value < threshold`
+  (exclusive) combined with `abs(r) >= threshold` (inclusive). The effect size
+  there is a correlation coefficient rather than a fold change, but the rule is
+  the same shape.
+- **1D Enrichment** FDR filtering now uses the same rule, with no effect-size
+  threshold.
+
+### Fixed
+- **1D Enrichment inserted a phantom all-NA pathway row** whenever an adjusted
+  p-value was `NA`. `df[df$padj <= cutoff, ]` returns an all-`NA` row for every
+  `NA` in the filter, which then reached the results table and both plots. This
+  is the same defect class as the donut-plot NA inflation fixed in v1.0.4;
+  routing the filter through `ov_is_hit()` removes it.
 
 ### Removed
 - Dead commented-out ID-selection code in the Volcano module, which encoded the

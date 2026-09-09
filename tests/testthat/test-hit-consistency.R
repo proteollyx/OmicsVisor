@@ -155,3 +155,67 @@ test_that("no module implements its own threshold comparison any more", {
     expect_false(grepl("(>|>=)\\s*input\\$logfc_cutoff", src), info = f)
   }
 })
+
+
+# ── The two modules that threshold on something other than logFC ────────────
+# Correlation thresholds on |r| and Feature Correlation adj.p; 1D Enrichment
+# filters pathways on FDR alone. Both are the same shape of rule and must use
+# the same function, or the inconsistency simply moves rather than being fixed.
+
+test_that("Correlation uses the shared rule for |r| and adjusted p", {
+  d <- sim_omics(n_features = 40, seed = 71)
+  b <- ov_bundle(d)
+  testServer(correlation_server, args = list(data = reactive(b)), {
+    session$setInputs(ref_feature = d$id[1], intensity_columns = b$intensity_cols,
+                      corr_method = "spearman", label_col = "Genes",
+                      r_threshold = 0.7, adjp_threshold = 0.1,
+                      point_size = 1.5, label_size = 2.5,
+                      pdf_width = 10, pdf_height = 6, run_corr = 1)
+    res <- corr_results()$results
+    plot_df <- res[!res$is_reference & !is.na(res$r), ]
+    want <- ov_is_hit(plot_df$r, plot_df$adj.p.value, 0.7, 0.1)
+    p <- make_plot()
+    got <- ggplot2::ggplot_build(p)$plot$data$significant
+    expect_equal(got, want)
+    expect_false(anyNA(got))
+  })
+})
+
+test_that("Correlation is inclusive at both thresholds", {
+  # |r| exactly at the threshold with adj.p exactly at the threshold is a hit
+  expect_true(ov_is_hit(0.7, 0.1, 0.7, 0.1))
+  expect_true(ov_is_hit(-0.7, 0.1, 0.7, 0.1))
+  expect_false(ov_is_hit(0.699, 0.1, 0.7, 0.1))
+})
+
+test_that("1D enrichment FDR filtering drops NA rows instead of inserting them", {
+  # df[df$padj <= fdr, ] inserts a phantom all-NA row for every NA padj -
+  # the same defect class as the v1.0.4 donut NA inflation
+  d <- data.frame(set = c("A", "B", "C"),
+                  rank_biserial = c(0.8, 0.5, -0.2),
+                  padj = c(0.01, NA, 0.9), stringsAsFactors = FALSE)
+
+  naive <- d[d$padj <= 0.05, ]
+  expect_equal(nrow(naive), 2L)             # documents the old behaviour
+  expect_true(anyNA(naive$set))
+
+  guarded <- d[ov_is_hit(d$rank_biserial, d$padj, 0, 0.05), , drop = FALSE]
+  expect_equal(nrow(guarded), 1L)
+  expect_equal(guarded$set, "A")
+  expect_false(anyNA(guarded$set))
+})
+
+test_that("every threshold comparison in the app goes through ov_is_hit", {
+  # sweep all module sources for a raw cutoff comparison in live code
+  mods <- setdiff(list.files(OV_ROOT, pattern = "\\.R$"),
+                  c("helper_functions.R", "app.R"))
+  offenders <- character(0)
+  for (f in mods) {
+    lines <- sub("#.*$", "", readLines(file.path(OV_ROOT, f), warn = FALSE))
+    src <- paste(lines, collapse = "\n")
+    if (grepl("(<|<=)\\s*(input\\$(pval|adjp|fdr)[a-z_]*|adjp_thr|padj_cut)", src) ||
+        grepl("(>|>=)\\s*(input\\$(logfc|r_thre)[a-z_]*|r_thr|fc_cut)", src))
+      offenders <- c(offenders, f)
+  }
+  expect_length(offenders, 0)
+})

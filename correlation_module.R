@@ -213,9 +213,11 @@ correlation_server <- function(id, data) {
       # Exclude the reference row itself from the plot
       plot_df <- results[!results$is_reference & !is.na(results$r), ]
       plot_df$neg_log10_adjp <- -log10(pmax(plot_df$adj.p.value, 1e-300))
-      plot_df$significant    <- !is.na(plot_df$adj.p.value) &
-        plot_df$adj.p.value < adjp_thr &
-        abs(plot_df$r) >= r_thr
+      # shared hit rule - see ov_is_hit(). The effect size here is the
+      # correlation r rather than a logFC, but the rule is the same shape:
+      # |effect| >= threshold and adjusted p <= threshold, inclusive on both.
+      plot_df$significant    <- ov_is_hit(plot_df$r, plot_df$adj.p.value,
+                                          r_thr, adjp_thr)
 
       label_col <- res$label_col_name
       plot_df$plot_label <- ifelse(

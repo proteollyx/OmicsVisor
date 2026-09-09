@@ -327,7 +327,10 @@ mod_pathway_1D_server <- function(id) {
       .ensure_pkg("stringr")
       df <- enr()
       validate(need(nrow(df) > 0, "No results"))
-      df <- df[df$padj <= input$fdr, , drop = FALSE]
+      # ov_is_hit() with no effect-size threshold: FDR only, but it carries the
+      # validity guards. Plain logical subsetting inserts a phantom all-NA
+      # row for every NA padj.
+      df <- df[ov_is_hit(df$rank_biserial, df$padj, 0, input$fdr), , drop = FALSE]
       validate(need(nrow(df) > 0, "No pathways pass the FDR cutoff"))
       df$overlap_pct <- 100 * df$size_overlap / pmax(df$size_total, 1)
       df$set_clean <- clean_labels(df$set)
@@ -343,7 +346,10 @@ mod_pathway_1D_server <- function(id) {
       df <- enr()
       validate(need(nrow(df) > 0, "No results"))
       if (isTRUE(input$apply_fdr_to_topsets)) {
-        df <- df[df$padj <= input$fdr, , drop = FALSE]
+        # ov_is_hit() with no effect-size threshold: FDR only, but it carries the
+        # validity guards. Plain logical subsetting inserts a phantom all-NA
+        # row for every NA padj.
+        df <- df[ov_is_hit(df$rank_biserial, df$padj, 0, input$fdr), , drop = FALSE]
         validate(need(nrow(df) > 0, "No pathways pass the FDR cutoff"))
       }
       df$set_clean <- clean_labels(df$set)
