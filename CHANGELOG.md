@@ -9,6 +9,15 @@ must always match it (enforced by `tests/testthat/test-version.R`).
 
 ---
 
+## [Unreleased]
+
+### Added
+- Tests asserting that every module identifies the `id` column **by name, never
+  by position**, using a fixture whose first column is `Genes`. This behaviour
+  was correct as of v1.2.0 but untested — before the UpSet fix in that release,
+  a table with `id` in any other position would have had its intersections
+  keyed on the first column instead, silently disagreeing with every other view.
+
 ## [1.2.0] - 2026-09-10
 
 **Release A of the September 2026 independent quality audit remediation.** All

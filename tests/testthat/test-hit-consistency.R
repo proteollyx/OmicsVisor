@@ -219,3 +219,87 @@ test_that("every threshold comparison in the app goes through ov_is_hit", {
   }
   expect_length(offenders, 0)
 })
+
+
+# ── The id column is identified by name, never by position ─────────────────
+# UpSet used to take nms[1] as the identifier ("assumed unique"), so on a table
+# whose first column was Genes it silently keyed its sets on gene symbols while
+# every other module keyed on id. Intersections then disagreed with the volcano
+# and the heatmap, with nothing to indicate it (audit OV-UX-14).
+
+id_not_first <- function(seed = 33) {
+  d <- sim_omics(n_features = 120, seed = seed)
+  ord <- names(d)
+  d[, c(setdiff(ord[1:6], "id"), "id", ord[7:length(ord)])]
+}
+
+test_that("the fixture really does move id away from the first column", {
+  d <- id_not_first()
+  expect_gt(which(names(d) == "id"), 1L)
+  expect_equal(names(d)[1], "Genes")
+})
+
+test_that("every module keys on id by name, not by column position", {
+  d <- id_not_first(); b <- ov_bundle(d)
+
+  testServer(data_overview_server, args = list(data = reactive(b)), {
+    session$setInputs(data_preview_rows_selected = c(1L, 2L))
+    expect_identical(selected_ids(), d$id[1:2])
+  })
+
+  testServer(volcano_plot_server, args = list(data = reactive(b)), {
+    session$setInputs(comparison_name = "KO.over.WT", pval_cutoff = 0.05,
+                      logfc_cutoff = 1, label_columns = character(0),
+                      generate_ids = 1)
+    expect_true(all(id_lists$all %in% d$id))
+    expect_false(any(id_lists$all %in% setdiff(d$Genes, d$id)))
+  })
+
+  testServer(upset_plot_server, args = list(data = reactive(b)), {
+    session$setInputs(direction = "both", logfc_cutoff = 1, adjp_cutoff = 0.05,
+                      n_intersects = 40, min_set_size = 1, allow_fc_only = FALSE)
+    mem <- membership_data()
+    # the identifiers must be ids, not the gene symbols in column 1
+    expect_true(all(mem$id %in% d$id))
+    expect_false(any(mem$id %in% setdiff(d$Genes, d$id)))
+  })
+
+  testServer(donut_plot_server, args = list(data = reactive(b)), {
+    session$setInputs(logfc_cutoff = 1, pval_cutoff = 0.05, apply_cutoff = 1,
+                      select_up_1 = TRUE)
+    expect_true(all(selected_ids() %in% d$id))
+  })
+
+  testServer(heatmap_server, args = list(data = reactive(b)), {
+    session$setInputs(id_selection = paste(d$id[1:5], collapse = ", "),
+                      intensity_columns = b$intensity_cols,
+                      row_label_columns = character(0), cluster_columns = FALSE,
+                      cluster_rows = FALSE, scale_rows = FALSE,
+                      use_custom_limits = FALSE, color_min = -1, color_max = 1,
+                      pdf_width = 8, pdf_height = 6, fontsize_row = 8, fontsize_col = 8)
+    expect_setequal(rownames(final_heatmap_data()$matrix), d$id[1:5])
+  })
+
+  testServer(id_list_generator_server, args = list(data = reactive(b)), {
+    session$setInputs(gene_list = d$Genes[1], search_column = "Genes",
+                      remove_na = FALSE, ignore_case = FALSE)
+    expect_identical(matched_ids(), d$id[1])
+  })
+})
+
+test_that("UpSet and Volcano agree on the same file when id is not first", {
+  d <- id_not_first(seed = 34); b <- ov_bundle(d)
+  want <- d$id[ov_is_hit(d$logFC_KO.over.WT, d$adj.P.Val_KO.over.WT, 1, 0.05)]
+
+  testServer(volcano_plot_server, args = list(data = reactive(b)), {
+    session$setInputs(comparison_name = "KO.over.WT", pval_cutoff = 0.05,
+                      logfc_cutoff = 1, label_columns = character(0), generate_ids = 1)
+    expect_setequal(id_lists$all, want)
+  })
+  testServer(upset_plot_server, args = list(data = reactive(b)), {
+    session$setInputs(direction = "both", logfc_cutoff = 1, adjp_cutoff = 0.05,
+                      n_intersects = 40, min_set_size = 1, allow_fc_only = FALSE)
+    mem <- membership_data()
+    expect_setequal(mem$id[mem$logFC_KO.over.WT], want)
+  })
+})
