@@ -75,6 +75,35 @@ with the MDC; the `LICENSE` file names both the author and the institution.
 
 ---
 
+## Deployment access
+
+The hosted instance is deliberately **public**: reachable without a login, so
+that collaborators outside the MDC, and readers who arrive via the repository or
+the DOI, can use it.
+
+This was considered and decided rather than left at a default. The reasoning:
+
+- The application holds no institutional data. It is a viewer over a file the
+  user supplies in their own session, and it stores nothing — the upload lives
+  in a per-session temporary directory and is discarded with the session.
+- The source is public under the MIT licence, so restricting the interface would
+  protect nothing that is not already open.
+- MDC Technology Transfer confirmed there is no commercial exposure.
+- Requiring institutional sign-in would exclude precisely the external
+  collaborators the tool exists to serve, and would leave the citable DOI
+  pointing at something most readers could not run.
+
+The residual risk is **availability rather than confidentiality**: parsing and
+rendering happen server-side, so large uploads consume resources on shared
+infrastructure. The appropriate mitigation is per-session resource limits at the
+hosting layer, not access control. The application's own upload ceiling is set in
+`app.R` (`shiny.maxRequestSize`).
+
+Users are warned in both the startup notice and the Disclaimer tab not to upload
+sensitive or personally identifiable data.
+
+---
+
 ## Everything else
 
 All source code in this repository — `app.R`, `helper_functions.R`,
