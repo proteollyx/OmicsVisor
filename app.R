@@ -315,13 +315,33 @@ server <- function(input, output, session) {
     )
     validate(need(!is.null(df) && nrow(df) > 0,
                   "The uploaded file contains no rows."))
-    if (!"id" %in% names(df))
-      showNotification(
-        paste("No 'id' column found. OmicsVisor is ID-driven: most modules",
-              "need a unique 'id' column and will stay empty without one."),
-        type = "warning", duration = 12
-      )
+
+    # Block only what cannot be true. An adjusted p-value outside [0, 1] is not
+    # a probability, and the realistic cause - a mis-mapped column - otherwise
+    # produces a perfectly plausible-looking volcano. Everything merely unusual
+    # is reported in the Data Overview panel instead of refused, because
+    # duplicate ids, infinite fold changes and zero p-values all occur in
+    # legitimate exports (audit finding OV-STAT-06).
+    # isolate(): the gate must depend on the *file*, not on the intensity
+    # regex. Without this, every keystroke in the regex box re-reads the
+    # workbook from disk and re-fires the warnings below. The live,
+    # regex-sensitive view is upload_report() and the Data Overview panel.
+    report <- ov_inspect_upload(df, isolate(input$int_regex) %||% "^Imputed")
+    validate(need(
+      length(report$fatal) == 0,
+      paste0("This file cannot be used as supplied:\n\n",
+             paste0("\u2022 ", report$fatal, collapse = "\n\n"))
+    ))
+    for (w in report$warnings)
+      showNotification(w, type = "warning", duration = 14)
+
     df
+  })
+
+  # One inspection, reported in full on the Data Overview tab
+  upload_report <- reactive({
+    req(input$upload_excel)
+    ov_inspect_upload(raw_file(), input$int_regex %||% "^Imputed")
   })
 
   # Comparisons available for the swap UI (detected from raw file, before any swap)
@@ -407,7 +427,7 @@ server <- function(input, output, session) {
   )
 
   # Call modules
-  data_overview_server("data_overview_module", data = data)
+  data_overview_server("data_overview_module", data = data, report = upload_report)
   volcano_plot_server("volcano_module", data = data)
   heatmap_server("heatmap_module", data = data)
   venndi_server("venndi_module")

@@ -290,6 +290,133 @@ ov_read_upload <- function(path, file_name = path) {
   df
 }
 
+#' Inspect an uploaded results table.
+#'
+#' One pass over the table producing everything both the upload gate and the
+#' diagnosis panel need. The gate blocks on `$fatal`; the panel reports the
+#' whole structure.
+#'
+#' The policy, deliberately narrow (audit finding OV-STAT-06):
+#'
+#'   * **Fatal** - only what cannot be true. An adjusted p-value outside
+#'     `[0, 1]` is not a probability. The realistic cause is not a corrupt file
+#'     but a mis-mapped column: if a t-statistic column is renamed to
+#'     `adj.P.Val_*`, `-log10()` of it still produces a plausible-looking
+#'     volcano with hits called and exported, and nothing signals that the
+#'     y-axis is meaningless. That failure is invisible without this check.
+#'   * **Warning** - everything merely unusual. Duplicate identifiers, infinite
+#'     fold changes and adjusted p-values of exactly zero all occur in
+#'     legitimate exports; blocking them would reject real files to solve
+#'     problems that affect one module at most.
+#'
+#' Naming alone cannot establish that a `logFC_` column is really log2, or that
+#' an `adj.P.Val_` column was produced by Benjamini-Hochberg. Those are reported
+#' as unverifiable rather than assumed.
+#'
+#' @param df        the uploaded table
+#' @param int_regex intensity-column regex, for reporting only
+#' @return list(rows, cols, id, comparisons, intensity, coerced, fatal, warnings)
+ov_inspect_upload <- function(df, int_regex = "^Imputed") {
+  fatal <- character(0); warn <- character(0)
+  nms <- names(df)
+
+  # ── identifier ────────────────────────────────────────────────────────────
+  id <- list(present = "id" %in% nms, n_unique = NA_integer_,
+             n_missing = NA_integer_, n_duplicate = NA_integer_)
+  if (!id$present) {
+    warn <- c(warn, paste0(
+      "No column named 'id'. OmicsVisor is ID-driven: the modules that select, ",
+      "cross-reference or intersect features need it, and will stay empty."))
+  } else {
+    v <- df[["id"]]
+    id$n_unique    <- length(unique(v[!is.na(v)]))
+    id$n_missing   <- sum(is.na(v))
+    id$n_duplicate <- sum(duplicated(v))
+    if (id$n_missing > 0)
+      warn <- c(warn, sprintf("'id' has %d missing value(s).", id$n_missing))
+    if (id$n_duplicate > 0)
+      warn <- c(warn, sprintf(
+        paste0("'id' has %d duplicate(s). Most views still work, but set ",
+               "operations (UpSet) need unique identifiers and will refuse."),
+        id$n_duplicate))
+  }
+
+  # ── comparisons ───────────────────────────────────────────────────────────
+  comps <- detect_comparisons(nms)
+  lone  <- setdiff(sub("^logFC_", "", grep("^logFC_", nms, value = TRUE)), comps)
+  if (length(lone))
+    warn <- c(warn, sprintf(
+      "No adj.P.Val_ partner for: %s. These cannot be thresholded on significance.",
+      paste(lone, collapse = ", ")))
+
+  ctab <- NULL
+  if (length(comps)) {
+    rows <- lapply(comps, function(cmp) {
+      fc <- suppressWarnings(as.numeric(df[[paste0("logFC_", cmp)]]))
+      pv <- suppressWarnings(as.numeric(df[[paste0("adj.P.Val_", cmp)]]))
+      bad <- sum(!is.na(pv) & (!is.finite(pv) | pv < 0 | pv > 1))
+      if (bad > 0)
+        fatal <<- c(fatal, sprintf(
+          paste0("adj.P.Val_%s contains %d value(s) outside [0, 1]. ",
+                 "These are not probabilities - check that the column has not ",
+                 "been mis-mapped (a t-statistic column renamed, for example)."),
+          cmp, bad))
+      n_inf <- sum(is.infinite(fc))
+      if (n_inf > 0)
+        warn <<- c(warn, sprintf(
+          "logFC_%s has %d infinite value(s); they are excluded from hit calls.",
+          cmp, n_inf))
+      n_zero <- sum(!is.na(pv) & pv == 0)
+      if (n_zero > 0)
+        warn <<- c(warn, sprintf(
+          paste0("adj.P.Val_%s has %d value(s) of exactly zero, most likely ",
+                 "underflow or rounding upstream. They are plotted at the ",
+                 "maximum rather than dropped."), cmp, n_zero))
+      data.frame(
+        comparison = cmp,
+        n_na_logFC = sum(is.na(fc)),
+        n_na_adjP  = sum(is.na(pv)),
+        padj_min   = suppressWarnings(min(pv, na.rm = TRUE)),
+        padj_max   = suppressWarnings(max(pv, na.rm = TRUE)),
+        n_invalid  = bad,
+        stringsAsFactors = FALSE)
+    })
+    ctab <- do.call(rbind, rows)
+    # min()/max() of an all-NA column returns +/-Inf with a warning; report NA
+    for (col in c("padj_min", "padj_max"))
+      ctab[[col]][!is.finite(ctab[[col]])] <- NA_real_
+  }
+
+  # ── intensity columns ─────────────────────────────────────────────────────
+  int_cols <- ov_detect_columns(df, int_regex)$intensity_cols
+  intensity <- list(regex = int_regex, n = length(int_cols),
+                    pct_missing = NA_real_, candidates = character(0))
+  if (length(int_cols) == 0) {
+    intensity$candidates <- utils::head(names(ov_intensity_prefix_groups(df)), 3)
+    warn <- c(warn, paste0(
+      "No intensity columns matched '", int_regex,
+      "'. The Heatmap, PCA, Boxplot and Correlation views will stay empty until ",
+      "the pattern matches your sample columns."))
+  } else {
+    m <- suppressWarnings(as.matrix(df[, int_cols, drop = FALSE]))
+    storage.mode(m) <- "double"
+    intensity$pct_missing <- 100 * sum(is.na(m)) / max(1L, length(m))
+  }
+
+  # ── columns that are not numeric but look as though they should be ────────
+  stat_like <- grep("^(logFC|t|P\\.Value|adj\\.P\\.Val)_", nms, value = TRUE)
+  coerced <- stat_like[!vapply(df[stat_like], is.numeric, logical(1))]
+  if (length(coerced))
+    warn <- c(warn, sprintf(
+      "%d statistic column(s) are not numeric and will be coerced: %s",
+      length(coerced), paste(utils::head(coerced, 4), collapse = ", ")))
+
+  list(rows = nrow(df), cols = ncol(df), id = id,
+       comparisons = ctab, n_comparisons = length(comps),
+       intensity = intensity, coerced = coerced,
+       fatal = fatal, warnings = warn)
+}
+
 #' Classify the columns of a results table.
 #'
 #' @param df        the results table
