@@ -9,11 +9,18 @@ must always match it (enforced by `tests/testthat/test-version.R`).
 
 ---
 
-## [Unreleased]
+## [1.3.0] - 2026-09-10
 
 **Release B of the September 2026 independent quality audit remediation.**
 Where Release A fixed defects, Release B is largely about telling the user what
 the app actually knows — and, just as importantly, what it does not.
+
+One behaviour change to be aware of: **a file whose adjusted p-values fall
+outside `[0, 1]` is now refused rather than loaded.** Such a file was never
+valid — the usual cause is a mis-mapped column — but it would previously have
+loaded and plotted convincingly. None of the 30 real result files checked
+before adopting this rule trips it. This is released as a minor version
+because the input contract is unchanged; only its enforcement is new.
 
 ### Added
 - **Upload validation, failing closed on impossible values** (audit OV-STAT-06).
