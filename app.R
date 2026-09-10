@@ -179,7 +179,7 @@ ui <- page_sidebar(
       card(
         card_header("Data input"),
         fileInput("upload_excel", "Upload file",
-                  accept = c(".xlsx", ".xls", ".txt", ".tsv", ".csv")),
+                  accept = c(".xlsx", ".txt", ".tsv", ".csv")),
         selectizeInput(
           "int_regex_preset",
           "Intensity columns:",

@@ -88,6 +88,15 @@ pca_ui <- function(id) {
             numericInput(ns("umap_n_components"), "n_components", value = 2, min = 2, max = 3, step = 1)
           )
         ),
+        fluidRow(
+          column(
+            4,
+            numericInput(ns("umap_seed"), "Random seed", value = 1, min = 0, step = 1)
+          )
+        ),
+        helpText("UMAP is stochastic. The seed fixes the embedding so the same
+                  data and settings reproduce the same coordinates; it is
+                  recorded in the exported coordinate file."),
         helpText("For plotting, only the first two UMAP components are used (UMAP1 vs UMAP2). 
                   Additional components can be used for downstream export or custom analysis.")
       ),
@@ -279,6 +288,25 @@ pca_server <- function(id, data) {
         type = "warning", duration = 8
       )
 
+    # prcomp(scale. = TRUE) cannot rescale a constant column, and a feature that
+    # is constant across the selected samples is routine - single-value
+    # imputation upstream produces them readily (audit OV-NUM-08). Drop them
+    # rather than letting one such feature take down the whole PCA.
+    if (isTRUE(input$pca_scale)) {
+      feature_sd <- apply(df, 1, stats::sd, na.rm = TRUE)
+      keep_rows  <- is.finite(feature_sd) & feature_sd > sqrt(.Machine$double.eps)
+      if (any(!keep_rows)) {
+        showNotification(
+          sprintf("%d zero-variance feature(s) excluded from the scaled PCA.",
+                  sum(!keep_rows)),
+          type = "warning", duration = 8)
+        df <- df[keep_rows, , drop = FALSE]
+      }
+      validate(need(nrow(df) >= 3,
+                    "Too few varying features remain for a scaled PCA. Uncheck
+                     'Scale data' or select more samples."))
+    }
+
     # prcomp expects variables in columns, samples in rows → transpose
     pca <- tryCatch(
       prcomp(t(df), scale. = input$pca_scale, center = input$pca_center),
@@ -351,6 +379,10 @@ pca_server <- function(id, data) {
     config$n_neighbors  <- n_neighbors
     config$min_dist     <- min_dist
     config$n_components <- n_components
+    # UMAP is stochastic; without a fixed random_state the same data and
+    # settings give a different embedding on every run, and the exported
+    # coordinates carry no record of which one was produced (audit OV-REP-04).
+    config$random_state <- as.integer(input$umap_seed %||% 1L)
 
     umap_res <- tryCatch(
       umap::umap(mat, config = config),
@@ -371,6 +403,7 @@ pca_server <- function(id, data) {
       umap_df$Group <- umap_df$Sample
     }
 
+    umap_df$umap_seed <- config$random_state
     umap_df
   })
   

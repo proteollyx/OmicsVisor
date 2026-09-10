@@ -9,9 +9,16 @@ must always match it (enforced by `tests/testthat/test-version.R`).
 
 ---
 
-## [Unreleased]
+## [1.2.0] - 2026-09-10
 
-Audit remediation, Release A. Accumulating until the correctness guards are complete.
+**Release A of the September 2026 independent quality audit remediation.** All
+eleven verified defects from the audit's confirmed-findings list are fixed, each
+with a regression test. Every finding was reproduced against the source before
+being changed.
+
+One behaviour change to be aware of: **hit boundaries are now inclusive**, so
+counts can shift by a small number of features sitting exactly on a cutoff. See
+the first entry below.
 
 ### Changed
 - **One shared definition of "hit", used by every module** (audit OV-VIZ-07).
@@ -37,6 +44,36 @@ Audit remediation, Release A. Accumulating until the correctness guards are comp
   the same shape.
 - **1D Enrichment** FDR filtering now uses the same rule, with no effect-size
   threshold.
+- The Heatmap no longer describes row z-scoring as normalising intensities
+  (audit OV-UX-13). For a non-coding audience that read as a substitute for
+  upstream proteomics normalisation, which it is not.
+
+- **UMAP is reproducible.** The module never set `config$random_state`, so the
+  same data and settings produced a different embedding on every run and the
+  exported coordinates recorded nothing about which one it was (audit
+  OV-REP-04). A seed input has been added, defaulting to 1, and the seed is
+  written into the exported coordinate file.
+- **A constant feature no longer takes down a scaled PCA** (audit OV-NUM-08).
+  `prcomp(scale. = TRUE)` cannot rescale a constant column, and a feature that
+  is constant across the selected samples is routine — single-value imputation
+  upstream produces them readily. Zero-variance features are now excluded from
+  scaled PCA, with a count reported. Unscaled PCA keeps them.
+- **Constant rows no longer produce `NaN` in a z-scored heatmap** (audit
+  OV-NUM-09). `scale()` divides by the row standard deviation, so a constant
+  feature yielded `NaN` in every cell, which then propagated into clustering
+  and rendering. Such rows are now shown at zero with a count reported.
+- **Gene queries are matched exactly instead of being compiled as regular
+  expressions** (audit OV-UX-18). Searching for an identifier containing a
+  regex metacharacter previously returned the wrong features *and* missed the
+  right one — looking for a gene named `A+B` returned `AB` and `AAB` while
+  missing `A+B` itself. Both a false positive and a false negative, silently,
+  in the module that produces the ID lists every other view consumes. The audit
+  rated this Low–Medium; it is treated here as high.
+- **Legacy `.xls` is rejected with an actionable message instead of failing at
+  read time** (audit OV-IO-11). Both `.xls` and `.xlsx` were routed to
+  `openxlsx::read.xlsx`, which reads only the XLSX format, so `.xls` was
+  advertised in the file picker and then failed. It has been removed from the
+  accepted extensions; the error asks the user to save as `.xlsx`.
 
 ### Fixed
 - **`swapFC()` destroyed statistics belonging to comparisons the user never

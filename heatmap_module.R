@@ -20,9 +20,10 @@ heatmap_ui <- function(id) {
          combined group label is formed. If clustering is turned off, the columns will be sorted alphabetically by these group labels, 
          effectively grouping columns that share the same annotated label. 
          
-         Clustering options allow you to cluster rows and/or columns using hierarchical clustering. Row-wise z-score scaling 
-         can be applied to normalize intensities. The 'Download Data' button exports the data matrix as a tab-delimited `.txt` file, 
-         and you can also download the resulting heatmap as a PDF for further analysis."),
+         Clustering options allow you to cluster rows and/or columns using hierarchical clustering. 
+         Row z-score is for visualization only: it does not normalize samples and should not replace 
+         upstream proteomics normalization. The 'Download Data' button exports the data matrix as a 
+         tab-delimited `.txt` file, and you can also download the resulting heatmap as a PDF for further analysis."),
       
       textInput(ns("id_selection"), "Manually select IDs (comma-separated):", ""),
       
@@ -228,9 +229,26 @@ heatmap_server <- function(id, data) {
       )
     }
 
-    # Scale rows if needed
+    # Scale rows if needed.
+    # scale() divides by the row SD, so a feature that is constant across the
+    # selected samples yields NaN for every cell, which then propagates into
+    # clustering and rendering (audit OV-NUM-09). Centre everything, divide
+    # only the rows that actually vary, and leave constant rows at zero.
     if (input$scale_rows) {
-      mat <- t(scale(t(mat), center = TRUE, scale = TRUE))
+      row_mean <- rowMeans(mat, na.rm = TRUE)
+      row_sd   <- apply(mat, 1, stats::sd, na.rm = TRUE)
+      constant <- !is.finite(row_sd) | row_sd <= sqrt(.Machine$double.eps)
+
+      mat <- sweep(mat, 1, row_mean, "-")
+      if (any(!constant))
+        mat[!constant, ] <- mat[!constant, , drop = FALSE] / row_sd[!constant]
+      if (any(constant)) {
+        mat[constant, ] <- 0
+        showNotification(
+          sprintf("%d feature(s) are constant across the selected samples; shown as zero z-score.",
+                  sum(constant)),
+          type = "warning", duration = 8)
+      }
     }
 
     col_dend <- NULL

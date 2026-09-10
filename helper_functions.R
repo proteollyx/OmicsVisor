@@ -103,17 +103,38 @@ swapFC <- function(df, groups = NULL) {
   df
 }
 
+#' Find which rows contain a given gene symbol.
+#'
+#' Fields may hold several identifiers separated by `split` (protein groups
+#' commonly look like "AAA;BBB;CCC"), so a match must be against a whole token
+#' rather than a substring.
+#'
+#' This used to build a regular expression out of the query. Any identifier
+#' containing a regex metacharacter was then interpreted rather than matched:
+#' searching for a gene literally named "A+B" returned "AB" and "AAB" and
+#' missed "A+B" itself — a false positive and a false negative at once, in the
+#' module that produces the ID lists every other view consumes (audit
+#' OV-UX-18). Splitting and comparing exactly removes the whole class.
+#'
+#' @param strings     character vector of queries
+#' @param vector      character vector of fields to search
+#' @param split       token separator within a field
+#' @param ignore.case compare case-insensitively
+#' @return named list, one element per query: the matching indices, or NA
 find_genes <- function(strings, vector, split = ";", ignore.case = FALSE) {
-  sapply(strings, function(string) {
-    grepper <- paste(c(paste0("^", string, "$"), paste0("^", string, split),
-      paste0(split, string, split), paste0(split, string, "$")), collapse = "|")
-    indices <- grep(grepper, vector, ignore.case = ignore.case)
-    if (length(indices) == 0) {
-      return(NA)
-    } else {
-      return(indices)
-    }
+  vec <- as.character(vector)
+  tokens <- strsplit(vec, split, fixed = TRUE)
+  tokens <- lapply(tokens, trimws)
+  if (ignore.case) tokens <- lapply(tokens, tolower)
+
+  out <- lapply(strings, function(query) {
+    q <- trimws(as.character(query))
+    if (ignore.case) q <- tolower(q)
+    hit <- vapply(tokens, function(tk) any(!is.na(tk) & tk == q), logical(1))
+    if (any(hit)) which(hit) else NA
   })
+  names(out) <- strings
+  out
 }
 
 # 1) Helper function to detect comparisons (logFC_ / adj.P.Val_)
@@ -239,7 +260,12 @@ ov_read_upload <- function(path, file_name = path) {
   df <- switch(
     ext,
     "xlsx" = read_xlsx_quiet(path),
-    "xls"  = read_xlsx_quiet(path),
+    # Legacy binary .xls (BIFF8) is a different format that openxlsx cannot
+    # read, so accepting it only produced a confusing failure at read time
+    # (audit OV-IO-11). Reject it with something actionable instead.
+    "xls"  = stop("Legacy .xls files are not supported. Please open the file ",
+                  "and save it as .xlsx, or export as .csv or .tsv.",
+                  call. = FALSE),
     "txt"  = ,
     "tsv"  = as.data.frame(data.table::fread(
       path, sep = "\t", quote = "", na.strings = c("", "NA", "NaN"))),

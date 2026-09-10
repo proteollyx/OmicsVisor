@@ -21,5 +21,5 @@
 #   PATCH  bug fixes and documentation only
 # ─────────────────────────────────────────────────────────
 
-ov_version      <- "1.1.4"
-ov_release_date <- "2026-09-09"
+ov_version      <- "1.2.0"
+ov_release_date <- "2026-09-10"

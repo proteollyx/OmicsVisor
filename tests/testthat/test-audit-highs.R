@@ -199,3 +199,167 @@ test_that("no volcano module calls -log10 on an adjusted p-value directly", {
     expect_length(offending, 0)
   }
 })
+
+
+# ══ A6 · OV-REP-04 — UMAP reproducibility ══════════════════════════════════
+
+test_that("UMAP is reproducible for a fixed seed", {
+  d <- sim_omics(n_features = 120, seed = 5); b <- ov_bundle(d)
+  run <- function(seed) {
+    out <- NULL
+    testServer(pca_server, args = list(data = reactive(b)), {
+      session$setInputs(dr_method = "UMAP", row_selection = "all", id_selection = "",
+                        intensity_columns = b$intensity_cols, color_scheme = "combined",
+                        point_size = 3, label_size = 3, pdf_width = 8, pdf_height = 6,
+                        umap_n_neighbors = 3, umap_min_dist = 0.1,
+                        umap_n_components = 2, umap_seed = seed)
+      out <<- umap_results()
+    })
+    out
+  }
+  a <- run(42); b2 <- run(42)
+  expect_equal(a$UMAP1, b2$UMAP1)
+  expect_equal(a$UMAP2, b2$UMAP2)
+})
+
+test_that("the UMAP seed is recorded in the exported coordinates", {
+  d <- sim_omics(n_features = 120, seed = 6); b <- ov_bundle(d)
+  testServer(pca_server, args = list(data = reactive(b)), {
+    session$setInputs(dr_method = "UMAP", row_selection = "all", id_selection = "",
+                      intensity_columns = b$intensity_cols, color_scheme = "combined",
+                      point_size = 3, label_size = 3, pdf_width = 8, pdf_height = 6,
+                      umap_n_neighbors = 3, umap_min_dist = 0.1,
+                      umap_n_components = 2, umap_seed = 7)
+    csv <- utils::read.csv(output$download_coords)
+    expect_true("umap_seed" %in% names(csv))
+    expect_true(all(csv$umap_seed == 7))
+  })
+})
+
+
+# ══ A7 · OV-NUM-08 — scaled PCA with a constant feature ════════════════════
+
+test_that("a constant feature no longer takes down a scaled PCA", {
+  # prcomp(scale. = TRUE) errors on a constant column; single-value imputation
+  # upstream produces such features routinely
+  d <- sim_omics(n_features = 60, seed = 8); b <- ov_bundle(d)
+  d[1, b$intensity_cols] <- 17           # constant across every sample
+  b <- ov_bundle(d)
+  testServer(pca_server, args = list(data = reactive(b)), {
+    session$setInputs(dr_method = "PCA", row_selection = "all", id_selection = "",
+                      intensity_columns = b$intensity_cols, pca_center = TRUE,
+                      pca_scale = TRUE, color_scheme = "combined", point_size = 3,
+                      label_size = 3, pdf_width = 8, pdf_height = 6, loadings_top_n = 20)
+    expect_no_error(pca_results())
+    expect_equal(nrow(pca_results()$df), length(b$intensity_cols))
+  })
+})
+
+test_that("an unscaled PCA still keeps constant features", {
+  d <- sim_omics(n_features = 60, seed = 9); b <- ov_bundle(d)
+  d[1, b$intensity_cols] <- 17
+  b <- ov_bundle(d)
+  testServer(pca_server, args = list(data = reactive(b)), {
+    session$setInputs(dr_method = "PCA", row_selection = "all", id_selection = "",
+                      intensity_columns = b$intensity_cols, pca_center = TRUE,
+                      pca_scale = FALSE, color_scheme = "combined", point_size = 3,
+                      label_size = 3, pdf_width = 8, pdf_height = 6, loadings_top_n = 20)
+    expect_no_error(pca_results())
+  })
+})
+
+
+# ══ A8 · OV-NUM-09 — heatmap z-score of a constant row ═════════════════════
+
+test_that("a constant row z-scores to zero rather than NaN", {
+  d <- sim_omics(n_features = 30, seed = 10); b <- ov_bundle(d)
+  d[1, b$intensity_cols] <- 12           # constant
+  b <- ov_bundle(d)
+  testServer(heatmap_server, args = list(data = reactive(b)), {
+    session$setInputs(id_selection = "", intensity_columns = b$intensity_cols,
+                      row_label_columns = character(0), cluster_columns = FALSE,
+                      cluster_rows = FALSE, scale_rows = TRUE,
+                      use_custom_limits = FALSE, color_min = -1, color_max = 1,
+                      pdf_width = 8, pdf_height = 6, fontsize_row = 8, fontsize_col = 8)
+    m <- final_heatmap_data()$matrix
+    expect_false(any(is.nan(m)))
+    expect_true(all(m[1, ] == 0))
+    # the varying rows are still standardised
+    expect_true(all(abs(rowMeans(m[-1, , drop = FALSE])) < 1e-8))
+  })
+})
+
+test_that("clustering still runs when a constant row is present", {
+  d <- sim_omics(n_features = 30, seed = 11); b <- ov_bundle(d)
+  d[1, b$intensity_cols] <- 12
+  b <- ov_bundle(d)
+  testServer(heatmap_server, args = list(data = reactive(b)), {
+    session$setInputs(id_selection = "", intensity_columns = b$intensity_cols,
+                      row_label_columns = character(0), cluster_columns = TRUE,
+                      cluster_rows = TRUE, scale_rows = TRUE,
+                      use_custom_limits = FALSE, color_min = -1, color_max = 1,
+                      pdf_width = 8, pdf_height = 6, fontsize_row = 8, fontsize_col = 8)
+    expect_no_error(output$heatmap_plot)
+  })
+})
+
+
+# ══ A9 · OV-UX-18 — gene queries must match exactly ════════════════════════
+
+test_that("regex metacharacters in a gene name match themselves and nothing else", {
+  # the defect: "A+B" was compiled as a regex, matching AB and AAB while
+  # missing A+B itself
+  vec <- c("A+B", "AB", "AAB")
+  expect_equal(unname(unlist(find_genes("A+B", vec))), 1L)
+
+  for (g in c("A+B", "A.B", "A(B)", "A[B]", "A*B", "A?B", "A|B", "A^B", "A$B")) {
+    v <- c(g, "OTHER", paste0("X;", g, ";Y"))
+    hits <- unlist(find_genes(g, v))
+    expect_setequal(unname(hits), c(1L, 3L))
+  }
+})
+
+test_that("exact matching still respects token boundaries and separators", {
+  vec <- c("TP53", "TP53BP1", "AAA;TP53;BBB", "BBB;TP53", "TP53;CCC")
+  expect_setequal(unname(unlist(find_genes("TP53", vec))), c(1L, 3L, 4L, 5L))
+})
+
+test_that("exact matching still honours ignore.case and reports misses", {
+  expect_true(is.na(unlist(find_genes("tp53", c("TP53")))))
+  expect_equal(unname(unlist(find_genes("tp53", c("TP53"), ignore.case = TRUE))), 1L)
+  expect_true(all(is.na(find_genes("NOPE", c("TP53", "EGFR"))[["NOPE"]])))
+})
+
+test_that("the ID List Generator finds identifiers containing metacharacters", {
+  d <- sim_omics(n_features = 10, seed = 12)
+  d$Genes[3] <- "A+B"
+  b <- ov_bundle(d)
+  testServer(id_list_generator_server, args = list(data = reactive(b)), {
+    session$setInputs(gene_list = "A+B", search_column = "Genes",
+                      remove_na = FALSE, ignore_case = FALSE)
+    expect_equal(matched_ids(), d$id[3])
+  })
+})
+
+
+# ══ A10 / A11 · wording and legacy .xls ════════════════════════════════════
+
+test_that("the heatmap no longer describes z-scoring as normalisation", {
+  html <- as.character(heatmap_ui("heatmap_module"))
+  expect_false(grepl("normalize intensities", html, fixed = TRUE))
+  expect_true(grepl("visualization only", html, fixed = TRUE))
+  expect_true(grepl("should not replace", html, fixed = TRUE))
+})
+
+test_that("legacy .xls is rejected with an actionable message", {
+  p <- tempfile(fileext = ".xls"); writeLines("not really an xls", p)
+  expect_error(ov_read_upload(p, basename(p)), "not supported")
+  expect_error(ov_read_upload(p, basename(p)), "save it as .xlsx", fixed = TRUE)
+})
+
+test_that(".xls is no longer offered in the file picker", {
+  src <- paste(readLines(file.path(OV_ROOT, "app.R"), warn = FALSE), collapse = "\n")
+  accept <- regmatches(src, regexpr('accept = c\\([^)]*\\)', src))
+  expect_false(grepl('"\\.xls"', accept))
+  expect_true(grepl('"\\.xlsx"', accept))
+})
