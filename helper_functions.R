@@ -607,3 +607,100 @@ ov_dr_retention <- function(mat) {
     worst_sample = worst
   )
 }
+
+
+# ─────────────────────────────────────────────────────────
+# Export manifest
+#
+# Audit finding OV-REP-04: an exported figure or table carries no record of
+# what produced it. This writes the provenance the app can actually vouch
+# for - which file, which build, which environment - and is deliberately
+# explicit about the much larger set of things it cannot know, because a
+# manifest that implies more provenance than exists is worse than none.
+#
+# The app never sees the search engine, the normalisation, the imputation or
+# the statistical test; those happened upstream, and the numbers in the
+# workbook are taken entirely on trust. Saying so is the point.
+# ─────────────────────────────────────────────────────────
+ov_manifest <- function(file_name = NULL, file_path = NULL, report = NULL,
+                        int_regex = NULL) {
+
+  kv <- function(k, v) sprintf("  %-22s %s", paste0(k, ":"), v)
+  na <- function(x) if (is.null(x) || !length(x) || is.na(x[1])) "(not recorded)" else x
+
+  hash <- "(not available)"
+  size <- "(not available)"
+  if (!is.null(file_path) && file.exists(file_path)) {
+    size <- sprintf("%.2f MB", file.info(file_path)$size / 1024^2)
+    hash <- tryCatch(
+      digest::digest(file = file_path, algo = "sha256"),
+      error = function(e) "(could not be computed)")
+  }
+
+  pkgs <- c("shiny", "openxlsx", "ggplot2", "umap", "UpSetR", "pheatmap",
+            "plotly", "data.table", "dplyr")
+  pkg_lines <- vapply(pkgs, function(p) {
+    v <- tryCatch(as.character(utils::packageVersion(p)),
+                  error = function(e) "(not installed)")
+    kv(p, v)
+  }, character(1), USE.NAMES = FALSE)
+
+  out <- c(
+    "OmicsVisor export manifest",
+    "==========================",
+    "",
+    "Software",
+    kv("Version",      ov_version),
+    kv("Release date", ov_release_date),
+    kv("Generated",    format(Sys.time(), "%Y-%m-%d %H:%M:%S %Z")),
+    "",
+    "Input file",
+    kv("Name",         na(file_name)),
+    kv("Size",         size),
+    kv("SHA-256",      hash)
+  )
+
+  if (!is.null(report)) {
+    id_state <- if (!isTRUE(report$id$present)) "no id column" else
+      sprintf("%d unique, %d duplicate, %d missing",
+              report$id$n_unique, report$id$n_duplicate, report$id$n_missing)
+    out <- c(out,
+      kv("Rows",        format(report$rows, big.mark = ",")),
+      kv("Columns",     format(report$cols, big.mark = ",")),
+      kv("Identifiers", id_state),
+      "",
+      "Detected in the file",
+      kv("Comparisons", if (report$n_comparisons == 0) "none" else
+                        paste(report$comparisons$comparison, collapse = ", ")),
+      kv("Intensity regex",   na(int_regex %||% report$intensity$regex)),
+      kv("Intensity columns", report$intensity$n)
+    )
+    if (length(report$warnings))
+      out <- c(out, "", "Warnings raised on upload",
+               paste0("  - ", report$warnings))
+  }
+
+  c(out,
+    "",
+    "Environment",
+    kv("R", paste(R.version$major, R.version$minor, sep = ".")),
+    kv("Platform", R.version$platform),
+    pkg_lines,
+    "",
+    "What this manifest does NOT record",
+    "  OmicsVisor reads a results table that was already produced elsewhere.",
+    "  It cannot observe, and therefore cannot certify, any of the following:",
+    "",
+    "  - the search engine, database and version used for identification",
+    "  - the quantification, normalisation and imputation applied upstream",
+    "  - the statistical test behind the p-values, and its assumptions",
+    "  - the multiple-testing correction actually used",
+    "  - the base of the fold changes (log2 is assumed and never verified)",
+    "  - whether the comparison directions are labelled as intended",
+    "  - any per-module settings chosen for an individual figure",
+    "",
+    "  Record those from the upstream pipeline. This manifest fixes only",
+    "  which file was loaded and which build of the app read it.",
+    ""
+  )
+}

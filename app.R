@@ -427,7 +427,8 @@ server <- function(input, output, session) {
   )
 
   # Call modules
-  data_overview_server("data_overview_module", data = data, report = upload_report)
+  data_overview_server("data_overview_module", data = data, report = upload_report,
+                       file_info = reactive(input$upload_excel))
   volcano_plot_server("volcano_module", data = data)
   heatmap_server("heatmap_module", data = data)
   venndi_server("venndi_module")

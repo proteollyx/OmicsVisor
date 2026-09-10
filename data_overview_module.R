@@ -12,6 +12,12 @@ data_overview_ui <- function(id) {
 
     uiOutput(ns("upload_diagnosis")),
 
+    div(style = "margin-bottom:14px;",
+        downloadButton(ns("download_manifest"),
+                       "Download session manifest (TXT)", class = "btn-sm"),
+        tags$span(style = "margin-left:10px; color:#555; font-size:0.88em;",
+                  "Records which file was loaded and which build read it.")),
+
     fluidRow(
       column(3,
         actionButton(ns("copy_selected_ids"), "Copy selected IDs",
@@ -26,7 +32,7 @@ data_overview_ui <- function(id) {
   )
 }
 
-data_overview_server <- function(id, data, report = NULL) {
+data_overview_server <- function(id, data, report = NULL, file_info = NULL) {
   moduleServer(id, function(input, output, session) {
 
     # What was read, and anything worth knowing about it. Reported rather than
@@ -92,6 +98,20 @@ data_overview_server <- function(id, data, report = NULL) {
         )
       )
     })
+
+    # OV-REP-04. Deliberately scoped to what the app can vouch for; the
+    # manifest itself lists what it cannot know.
+    output$download_manifest <- downloadHandler(
+      filename = function()
+        paste0("OmicsVisor_manifest_", format(Sys.time(), "%Y%m%d_%H%M%S"), ".txt"),
+      content = function(file) {
+        r <- if (is.null(report)) NULL else tryCatch(report(), error = function(e) NULL)
+        f <- if (is.null(file_info)) NULL else tryCatch(file_info(), error = function(e) NULL)
+        writeLines(
+          ov_manifest(file_name = f$name, file_path = f$datapath, report = r),
+          file)
+      }
+    )
 
     output$data_preview <- renderDT({
       req(data())
