@@ -115,6 +115,15 @@ volcano_printer_server <- function(id, data) {
     df$significant <- ov_is_hit(df[[cols$logFC]], df[[cols$adjP]],
                                 input$logfc_cutoff, input$pval_cutoff)
 
+    # see ov_neglog10_padj(): guards against 0, negatives and values above 1
+    yy <- ov_neglog10_padj(df[[cols$adjP]])
+    df$.neglog10_padj <- yy$y
+    if (yy$n_invalid > 0)
+      showNotification(
+        sprintf("%d adjusted p-value(s) are outside [0, 1] or non-finite and were excluded.",
+                yy$n_invalid),
+        type = "error", duration = 10)
+
     # If user typed IDs
     selected_ids <- trimws(strsplit(input$id_selection %||% "", ",")[[1]])
     selected_ids <- selected_ids[nzchar(selected_ids)]
@@ -143,7 +152,7 @@ volcano_printer_server <- function(id, data) {
     cols <- chosen_cols()
     req(cols$logFC, cols$adjP)
 
-    p <- ggplot(df, aes(x = .data[[cols$logFC]], y = -log10(.data[[cols$adjP]]))) +
+    p <- ggplot(df, aes(x = .data[[cols$logFC]], y = .data$.neglog10_padj)) +
       geom_point(aes(color = significant), size = 2) +
       scale_color_manual(values = c("grey", "#F85414"), labels = c("Non-Significant", "Significant")) +
       labs(
@@ -151,7 +160,7 @@ volcano_printer_server <- function(id, data) {
         subtitle = sprintf("adj.P ≤ %.2g  |  |logFC| ≥ %.2g",
                            input$pval_cutoff, input$logfc_cutoff),
         x = paste0(cols$logFC, " (log2 fold change)"),
-        y = "-log10(adj.P-value)"
+        y = "\u2212log10(adjusted P-value)"
       ) +
       theme_minimal() +
       ggrepel::geom_text_repel(
@@ -185,7 +194,7 @@ volcano_printer_server <- function(id, data) {
       cols <- chosen_cols()
       req(cols$logFC, cols$adjP)
       
-      plot_to_save <- ggplot(df, aes(x = .data[[cols$logFC]], y = -log10(.data[[cols$adjP]]))) +
+      plot_to_save <- ggplot(df, aes(x = .data[[cols$logFC]], y = .data$.neglog10_padj)) +
         geom_point(aes(color = significant), size = 2) +
         scale_color_manual(values = c("grey", "#F85414"), labels = c("Non-Significant", "Significant")) +
         labs(
@@ -193,7 +202,7 @@ volcano_printer_server <- function(id, data) {
           subtitle = sprintf("adj.P ≤ %.2g  |  |logFC| ≥ %.2g",
                              input$pval_cutoff, input$logfc_cutoff),
           x = paste0(cols$logFC, " (log2 fold change)"),
-          y = "-log10(adj.P-value)"
+          y = "\u2212log10(adjusted P-value)"
         ) +
         theme_minimal() +
         ggrepel::geom_text_repel(

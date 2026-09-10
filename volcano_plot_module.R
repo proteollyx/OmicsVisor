@@ -141,6 +141,16 @@ volcano_plot_server <- function(id, data) {
     # shared hit rule - see ov_is_hit() in helper_functions.R
     df$significant <- ov_is_hit(df[[cols$logFC]], df[[cols$adjP]],
                                 input$logfc_cutoff, input$pval_cutoff)
+
+    # Safe y ordinate: an adj.P of 0 would otherwise become Inf and be dropped
+    # by plotly, silently removing the most significant feature from the plot.
+    yy <- ov_neglog10_padj(df[[cols$adjP]])
+    df$.neglog10_padj <- yy$y
+    if (yy$n_invalid > 0)
+      showNotification(
+        sprintf("%d adjusted p-value(s) are outside [0, 1] or non-finite and were excluded.",
+                yy$n_invalid),
+        type = "error", duration = 10)
     
     # Generate labels if label_columns are selected
     if (!is.null(input$label_columns) && length(input$label_columns) > 0) {
@@ -154,7 +164,7 @@ volcano_plot_server <- function(id, data) {
     p <- plot_ly(
       df,
       x = ~df[[cols$logFC]],
-      y = ~-log10(df[[cols$adjP]]),
+      y = ~.neglog10_padj,
       text = ~labels,
       key  = ~id,                     # NEW: carry the ID, needed in plotly_click
       source = "volcano_src",         # NEW: match event_data() source
@@ -174,7 +184,7 @@ volcano_plot_server <- function(id, data) {
         p,
         data = df_labs,
         x = ~df_labs[[cols$logFC]],
-        y = ~-log10(df_labs[[cols$adjP]]),
+        y = ~df_labs$.neglog10_padj,
         text = ~labels,
         textposition = "top center",
         showlegend = FALSE,
@@ -186,7 +196,7 @@ volcano_plot_server <- function(id, data) {
       p,
       title = paste("Volcano Plot:", input$comparison_name),
       xaxis = list(title = "logFC"),
-      yaxis = list(title = "-log10(adj.P-value)")
+      yaxis = list(title = "\u2212log10(adjusted P-value)")
     )
     
     # NEW: explicitly register click events

@@ -39,6 +39,38 @@ Audit remediation, Release A. Accumulating until the correctness guards are comp
   threshold.
 
 ### Fixed
+- **`swapFC()` destroyed statistics belonging to comparisons the user never
+  selected** (audit OV-CORR-01, High). Reversing one comparison deleted the
+  `t_` and `P.Value_` columns of *every* comparison in the table, and that
+  table is offered for download — so it was data loss, not merely a display
+  problem. The justification recorded in v1.0.0, that these were "invalidated
+  by the direction swap", was also wrong: reversing a two-sided contrast
+  negates the effect and the t-statistic, while the two-sided p-value and its
+  adjusted counterpart are unchanged. `swapFC()` now transforms only the
+  selected comparisons — negating `logFC` and `t`, leaving `P.Value` and
+  `adj.P.Val` alone — and refuses to proceed if the reversed name would collide
+  with a comparison that already exists.
+- **UpSet presented fold-change-only sets as if they had been tested for
+  significance** (audit OV-VIZ-02, High). When a `logFC_` column had no
+  matching `adj.P.Val_` column the significance filter was silently skipped,
+  while the interface continued to describe the sets as filtered on both. The
+  module now refuses to build the plot, naming the offending columns. A
+  default-off option, *"Allow fold-change-only sets (statistical significance
+  NOT assessed)"*, is available for the rare case where that is genuinely
+  wanted.
+- **UpSet took whatever the first column happened to be as the identifier**
+  (audit OV-UX-14), with no check that it was named `id`, non-missing or
+  unique — duplicates silently inflated intersection sizes. It now requires a
+  real `id`, consistent with every other module.
+- **A zero adjusted p-value made the most significant feature vanish from the
+  volcano** (audit OV-NUM-03, High). `-log10(0)` is `Inf`, and plotting
+  libraries discard non-finite points, so the top hit disappeared with only a
+  console warning — the plot itself looked entirely normal. Adjusted p-values
+  are now floored at the smallest representable double, so an exact zero plots
+  at a finite maximum. Values outside `[0, 1]` are excluded and reported with a
+  visible count rather than silently producing `NaN` or a negative ordinate.
+  Zero adjusted p-values are not hypothetical: they arise from numerical
+  underflow and from rounding in exported tables.
 - **1D Enrichment inserted a phantom all-NA pathway row** whenever an adjusted
   p-value was `NA`. `df[df$padj <= cutoff, ]` returns an all-`NA` row for every
   `NA` in the filter, which then reached the results table and both plots. This

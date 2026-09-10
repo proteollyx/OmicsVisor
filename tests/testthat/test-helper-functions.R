@@ -35,11 +35,19 @@ test_that("swapFC negates logFC and flips the comparison name", {
   expect_equal(out$logFC_WT.over.KO, -orig)
 })
 
-test_that("swapFC drops t_ and P.Value_ columns (invalidated by the flip)", {
+test_that("swapFC keeps t_ and P.Value_, negating only the t-statistic", {
+  # This test previously asserted that both column families were deleted, on
+  # the grounds that they were "invalidated by the direction swap". That was
+  # wrong: reversing a two-sided contrast negates the effect and the
+  # t-statistic, while the two-sided p-value is unchanged. The old deletion was
+  # also global, destroying statistics for comparisons the user never selected
+  # (audit finding OV-CORR-01). See test-audit-highs.R for the full invariants.
   df  <- sim_omics(n_features = 10, comparisons = "KO.over.WT")
   out <- swapFC(df, groups = "KO.over.WT")
-  expect_length(grep("^t_",       names(out)), 0)
-  expect_length(grep("^P\\.Value_", names(out)), 0)
+  expect_true("t_WT.over.KO"       %in% names(out))
+  expect_true("P.Value_WT.over.KO" %in% names(out))
+  expect_equal(out$t_WT.over.KO,       -df$t_KO.over.WT)
+  expect_equal(out$P.Value_WT.over.KO,  df$P.Value_KO.over.WT)
 })
 
 test_that("swapFC leaves unselected comparisons untouched", {

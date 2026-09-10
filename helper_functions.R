@@ -37,44 +37,69 @@ distcols3 <- c("#88BDE6", "#FBB258", "#90CD97", "#F6AAC9", "#BFA554", "#BC99C7",
 combined_colors <- c(woco, distcols3)
 
 
+#' Reverse the direction of selected pairwise comparisons.
+#'
+#' For each selected `x.over.y` comparison this renames the suffix to
+#' `y.over.x` and flips the sign of the quantities that are direction
+#' dependent. Columns belonging to comparisons that were not selected are left
+#' exactly as they were.
+#'
+#' Which quantities change, and why:
+#'
+#'   * `logFC` negates - the effect is measured in the opposite direction.
+#'   * `t`     negates - the test statistic follows the effect.
+#'   * `P.Value`, `adj.P.Val` are unchanged - a two-sided p-value is invariant
+#'     under reversal of the contrast.
+#'
+#' An earlier version deleted every `t_` and `P.Value_` column in the table,
+#' not merely those of the selected comparisons, on the grounds that they were
+#' "invalidated by the direction swap". That reasoning was wrong for two-sided
+#' tests, and because the deletion was global it destroyed statistics belonging
+#' to comparisons the user had not touched - including in the processed table
+#' offered for download (audit finding OV-CORR-01).
+#'
+#' @param df      results table
+#' @param groups  comparison names to reverse, e.g. "KO.over.WT". NULL reverses
+#'                every `x.over.y` comparison found.
+#' @return the table with the selected comparisons reversed
 swapFC <- function(df, groups = NULL) {
   stopifnot(is.data.frame(df))
 
-  stat_pat <- "^(logFC|t|P\\.Value|adj\\.P\\.Val)_"
-  stat_ix  <- grep(stat_pat, names(df))
+  # sign applied to each statistic family when the contrast is reversed
+  transforms <- c(logFC = -1, t = -1, P.Value = 1, adj.P.Val = 1)
+  stat_pat   <- "^(logFC|t|P\\.Value|adj\\.P\\.Val)_"
+
+  stat_ix <- grep(stat_pat, names(df))
   if (!length(stat_ix)) return(df)
 
-  nms   <- names(df)[stat_ix]
-  comps <- sub(stat_pat, "", nms)
+  comps <- sub(stat_pat, "", names(df)[stat_ix])
+  keep  <- grepl("\\.over\\.", comps)          # only x.over.y can be reversed
+  if (!any(keep)) return(df)
 
-  # restrict to x.over.y comparisons
-  keep     <- grepl("\\.over\\.", comps)
-  stat_ix  <- stat_ix[keep]
-  nms      <- nms[keep]
-  comps    <- comps[keep]
-  if (!length(stat_ix)) return(df)
+  present <- unique(comps[keep])
+  targets <- if (is.null(groups)) present else intersect(present, trimws(groups))
+  if (!length(targets)) return(df)
 
-  sel <- if (is.null(groups)) rep(TRUE, length(comps)) else comps %in% trimws(groups)
-  if (!any(sel)) return(df)
+  for (old_cmp in targets) {
+    parts   <- strsplit(old_cmp, ".over.", fixed = TRUE)[[1]]
+    if (length(parts) != 2L) next
+    new_cmp <- paste(parts[2L], parts[1L], sep = ".over.")
 
-  target_ix <- stat_ix[sel]
-  prefix    <- sub("_.*$", "", names(df)[target_ix])
+    # refuse to overwrite a comparison that already exists in the other direction
+    clash <- paste0(names(transforms), "_", new_cmp)
+    clash <- clash[clash %in% names(df) & !clash %in% paste0(names(transforms), "_", old_cmp)]
+    if (length(clash))
+      stop("Reversing '", old_cmp, "' would collide with existing column(s): ",
+           paste(clash, collapse = ", "), call. = FALSE)
 
-  # rename x.over.y → y.over.x
-  flipped           <- sub("^(.+)\\.over\\.(.+)$", "\\2.over.\\1", comps[sel])
-  names(df)[target_ix] <- paste0(prefix, "_", flipped)
-
-  # negate logFC only
-  logfc_ix <- target_ix[prefix == "logFC"]
-  if (length(logfc_ix)) {
-    num <- vapply(logfc_ix, function(i) is.numeric(df[[i]]), logical(1))
-    df[, logfc_ix[num]] <- -df[, logfc_ix[num], drop = FALSE]
+    for (prefix in names(transforms)) {
+      old_col <- paste0(prefix, "_", old_cmp)
+      if (!old_col %in% names(df)) next
+      if (transforms[[prefix]] == -1 && is.numeric(df[[old_col]]))
+        df[[old_col]] <- -df[[old_col]]
+      names(df)[names(df) == old_col] <- paste0(prefix, "_", new_cmp)
+    }
   }
-
-  # drop t_ and P.Value_ columns (invalidated by direction swap)
-  drop_ix <- grep("^(t|P\\.Value)_", names(df))
-  if (length(drop_ix)) df <- df[, -drop_ix, drop = FALSE]
-
   df
 }
 
@@ -157,6 +182,33 @@ ov_is_hit <- function(logfc, padj, fc_cut, padj_cut,
   out <- valid & fc_ok & p_ok
   out[is.na(out)] <- FALSE
   out
+}
+
+#' -log10 of an adjusted p-value, safe for plotting.
+#'
+#' `-log10()` applied straight to an adjusted p-value column misbehaves in three
+#' ways that all occur in real exported tables: `0` gives `Inf`, a negative
+#' value gives `NaN`, and a value above 1 gives a negative ordinate. Plotting
+#' libraries then discard the non-finite points, so the single most significant
+#' feature silently disappears from the volcano rather than appearing at the top
+#' (audit finding OV-NUM-03).
+#'
+#' Zero adjusted p-values are not hypothetical - they arise from numerical
+#' underflow and from rounding in exported tables.
+#'
+#' The 1D Enrichment module already used this flooring; this makes it shared.
+#'
+#' @param p       numeric vector of adjusted p-values
+#' @return list(y = numeric vector safe to plot, n_invalid = count of values
+#'   outside [0, 1] or non-finite, which are returned as NA)
+ov_neglog10_padj <- function(p) {
+  p <- suppressWarnings(as.numeric(p))
+  invalid <- !is.na(p) & (!is.finite(p) | p < 0 | p > 1)
+  p[invalid] <- NA_real_
+  # floor at the smallest representable double so an exact zero plots at a
+  # finite maximum instead of vanishing
+  list(y = -log10(pmax(p, .Machine$double.xmin)),
+       n_invalid = sum(invalid))
 }
 
 # ── Upload handling ──────────────────────────────────────────────────────────

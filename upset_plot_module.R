@@ -45,7 +45,15 @@ upset_plot_ui <- function(id) {
               value = 0.05,
               step = 0.01
             ),
-            helpText("For each logFC_ column, OmicsVisor will try to use a matching adj.P.Val_ column with the same suffix."),
+            helpText("Each logFC_ column is paired with the adj.P.Val_ column of the same name."),
+            checkboxInput(
+              ns("allow_fc_only"),
+              "Allow fold-change-only sets (statistical significance NOT assessed)",
+              value = FALSE
+            ),
+            helpText("Leave unticked. If a comparison has no adj.P.Val_ column, the
+                      plot is refused rather than quietly showing sets that were
+                      never filtered for significance."),
             
             hr(),
             h4("Plot options"),
@@ -110,12 +118,28 @@ upset_plot_server <- function(id, data) {
                                   logfc_cut,
                                   adjp_cut,
                                   min_set_size,
-                                  n_intersects) {
+                                  n_intersects,
+                                  allow_fc_only = FALSE) {
     stopifnot(is.data.frame(df))
     nms <- names(df)
-    
-    # ID = first column
-    id_col <- nms[1]
+
+    # The rest of the application is id-driven; UpSet used to take whatever the
+    # first column happened to be, with no uniqueness check. Duplicate or
+    # missing identifiers silently inflate intersection sizes (audit OV-UX-14).
+    if (!"id" %in% nms)
+      return(list(ok = FALSE,
+                  reason = "UpSet requires an 'id' column, like every other module.",
+                  membership = NULL, upset_input = NULL, id_col = NA_character_))
+    id_col <- "id"
+    if (anyNA(df[[id_col]]))
+      return(list(ok = FALSE, reason = "'id' contains missing values.",
+                  membership = NULL, upset_input = NULL, id_col = id_col))
+    if (anyDuplicated(df[[id_col]]))
+      return(list(ok = FALSE,
+                  reason = paste0("'id' must be unique for set operations; ",
+                                  sum(duplicated(df[[id_col]])),
+                                  " duplicate(s) found. Deduplicate upstream."),
+                  membership = NULL, upset_input = NULL, id_col = id_col))
     
     logfc_cols <- nms[grepl("^logFC_", nms)]
     if (length(logfc_cols) == 0L) {
@@ -138,6 +162,17 @@ upset_plot_server <- function(id, data) {
       if (length(hit) > 0) adj_cols[i] <- hit[1]
     }
     
+    unpaired <- logfc_cols[is.na(adj_cols)]
+    if (length(unpaired) && !isTRUE(allow_fc_only))
+      return(list(
+        ok = FALSE,
+        reason = paste0(
+          "No adj.P.Val_ column found for: ", paste(unpaired, collapse = ", "),
+          ". These sets would be built from fold change alone, with no test of ",
+          "significance. Add the adjusted-P columns, deselect those comparisons, ",
+          "or tick \"Allow fold-change-only sets\" to proceed knowingly."),
+        membership = NULL, upset_input = NULL, id_col = id_col))
+
     ids <- df[[id_col]]
     
     # numeric coercion
@@ -161,10 +196,12 @@ upset_plot_server <- function(id, data) {
       if (!is.na(ac)) {
         hits <- ov_is_hit(v, df[[ac]], logfc_cut, adjp_cut, direction = direction)
       } else {
-        # No adjusted-P partner: fold change alone. Passing padj = 0 with a
-        # cutoff of 1 makes the p-test vacuous while keeping the same validity
-        # and direction handling as every other module.
-        # TODO (audit OV-VIZ-02): this should fail closed instead.
+        # No adjusted-P partner. Previously the significance filter was simply
+        # skipped, so the set was built from fold change alone while the
+        # interface still described it as filtered on both - a set could be
+        # presented as "hits" having never been tested (audit OV-VIZ-02).
+        # Passing padj = 0 against a cutoff of 1 makes the p-test vacuous while
+        # keeping the same validity and direction handling as every other module.
         hits <- ov_is_hit(v, rep(0, length(v)), logfc_cut, 1, direction = direction)
       }
       mat_list[[lf]] <- hits
@@ -252,7 +289,8 @@ upset_plot_server <- function(id, data) {
       logfc_cut    = input$logfc_cutoff,
       adjp_cut     = input$adjp_cutoff,
       min_set_size = 1,  # membership table doesn't filter by set size
-      n_intersects = input$n_intersects
+      n_intersects = input$n_intersects,
+      allow_fc_only = isTRUE(input$allow_fc_only)
     )
     
     validate(need(res$ok, res$reason %||% "Unable to build membership matrix."))
@@ -271,7 +309,8 @@ upset_plot_server <- function(id, data) {
       logfc_cut    = input$logfc_cutoff,
       adjp_cut     = input$adjp_cutoff,
       min_set_size = input$min_set_size,
-      n_intersects = input$n_intersects
+      n_intersects = input$n_intersects,
+      allow_fc_only = isTRUE(input$allow_fc_only)
     )
     
     validate(need(res$ok, res$reason %||% "Unable to build UpSet input."))
@@ -316,7 +355,8 @@ upset_plot_server <- function(id, data) {
         logfc_cut    = input$logfc_cutoff,
         adjp_cut     = input$adjp_cutoff,
         min_set_size = input$min_set_size,
-        n_intersects = input$n_intersects
+        n_intersects = input$n_intersects,
+        allow_fc_only = isTRUE(input$allow_fc_only)
       )
       
       pdf(file, width = 8, height = 6)
@@ -367,7 +407,8 @@ upset_plot_server <- function(id, data) {
       logfc_cut    = input$logfc_cutoff,
       adjp_cut     = input$adjp_cutoff,
       min_set_size = input$min_set_size,
-      n_intersects = input$n_intersects
+      n_intersects = input$n_intersects,
+      allow_fc_only = isTRUE(input$allow_fc_only)
     )
     validate(need(res$ok, res$reason %||% "Unable to build intersection groups."))
 
