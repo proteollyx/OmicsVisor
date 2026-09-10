@@ -50,6 +50,51 @@ mod_pathway_1D_ui <- function(id, title = "1D Enrichment") {
         tabsetPanel(
           tabPanel(
             "Results table",
+            # --- how to read these p-values -----------------------------------
+            # The competitive Wilcoxon test assumes features are independent.
+            # They are not, and co-regulation is precisely what makes a set
+            # worth testing, so this is not an edge case (audit OV-ENR-05).
+            # The inflation figures are measured, not asserted: see
+            # validation/competitive_null_calibration.R.
+            div(
+              style = paste("border:1px solid #e6d5b8; border-left:4px solid #8a4b00;",
+                            "background:#FDF6EC; border-radius:4px;",
+                            "padding:10px 14px; margin:10px 0 16px 0;"),
+              tags$div(style = "font-weight:700; color:#8a4b00; margin-bottom:4px;",
+                       "How to read these p-values"),
+              tags$p(
+                style = "margin-bottom:6px;",
+                "This is a ", tags$b("competitive"), " test: each set's values are ",
+                "compared with those of all other features by a Wilcoxon rank-sum ",
+                "test. It asks whether a set is shifted ", tags$i("relative to the ",
+                "rest of the data"), " \u2014 not whether it is shifted at all."),
+              tags$p(
+                style = "margin-bottom:6px;",
+                "The test assumes features vary independently. In omics data they ",
+                "do not: members of a complex or pathway are co-regulated, which ",
+                "is the very reason the set is worth testing. Positive ",
+                "within-set correlation inflates the null variance of the ",
+                "statistic, so p-values come out too small and the BH-adjusted ",
+                "values understate the false discovery rate."),
+              tags$p(
+                style = "margin-bottom:6px;",
+                "Simulation on a null where nothing is truly shifted (see ",
+                tags$code("validation/competitive_null_calibration.R"), ") gives a ",
+                "rejection rate at a nominal 5% of roughly ", tags$b("5%"),
+                " when features are independent, but ", tags$b("16\u201354%"),
+                " at a within-set correlation of only 0.05, and ",
+                tags$b("47\u201381%"), " at 0.3. Larger sets are affected most."),
+              tags$p(
+                style = "margin-bottom:0;",
+                tags$b("In practice: "), "treat the FDR column as a ranking device, ",
+                "not as a calibrated error rate, and do not report these values as ",
+                "the false discovery rate of your findings. Judge sets on the ",
+                tags$code("rank_biserial"), " effect size and ",
+                tags$code("delta_median"), " as well as on rank, and confirm ",
+                "anything you intend to publish with a method that models ",
+                "inter-feature correlation (for example CAMERA, or a ",
+                "sample-permutation test that preserves it).")
+            ),
             DT::dataTableOutput(ns("tab"))
           ),
           tabPanel(

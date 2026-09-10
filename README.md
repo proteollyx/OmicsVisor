@@ -108,7 +108,9 @@ skip them.
 - **PCA, UMAP and clustering need complete data.** Features with any missing
   value are dropped from dimensionality reduction, and hierarchical clustering
   cannot run on a matrix with missing cells. Use imputed intensities for these
-  views; the app tells you how many features it dropped.
+  views. A panel above the plot reports how many features survived, and — since
+  the loss is usually driven by one poorly covered run rather than spread
+  evenly — which single sample you could exclude to recover the most.
 - **logFC is assumed to be log₂.** A cutoff of 1 means a two-fold change.
 - **PTM data is only partly supported.** Site-level tables load and the
   comparison views work, but nothing in the app is PTM-aware (no
@@ -116,7 +118,21 @@ skip them.
 - **The intensity regex must match your column names.** If the sidebar reports
   no intensity columns, the matrix-based modules (Heatmap, PCA, Boxplot,
   Correlation) will stay empty. Set a custom pattern to match whatever prefix
-  your export uses.
+  your export uses; the Data Overview panel suggests one when it can.
+- **1D enrichment p-values are not calibrated.** The module runs a competitive
+  Wilcoxon rank-sum test, which assumes features vary independently. They do
+  not — co-regulation within a pathway or complex is precisely what makes a set
+  worth testing — and the resulting p-values are strongly anti-conservative.
+  Simulation on a null where nothing is truly shifted
+  (`validation/competitive_null_calibration.R`) shows the rejection rate at a
+  nominal 5% rising to tens of percent at within-set correlations as low as
+  0.05. Use the FDR column to rank sets, not to state a false discovery rate,
+  and confirm anything you intend to publish with a method that models
+  inter-feature correlation.
+- **OmicsVisor cannot verify what happened upstream.** It reads a results table
+  produced elsewhere and never sees the search engine, normalisation,
+  imputation, statistical test or correction method. The downloadable session
+  manifest records what the app can vouch for and lists what it cannot.
 
 ---
 

@@ -11,12 +11,72 @@ must always match it (enforced by `tests/testthat/test-version.R`).
 
 ## [Unreleased]
 
+**Release B of the September 2026 independent quality audit remediation.**
+Where Release A fixed defects, Release B is largely about telling the user what
+the app actually knows — and, just as importantly, what it does not.
+
 ### Added
+- **Upload validation, failing closed on impossible values** (audit OV-STAT-06).
+  An adjusted p-value outside `[0, 1]` is not a probability, and the realistic
+  cause — a mis-mapped column, such as a t-statistic read as `adj.P.Val` —
+  otherwise produces a perfectly plausible-looking volcano. Such files are now
+  refused, naming the offending comparison. Bounds are inclusive: `0` arises
+  from permutation tests and `1` from BH adjustment, so neither is rejected.
+- **A "What was loaded" panel on the Data Overview tab.** Reports table shape,
+  identifier status, comparison count, observed adjusted-p range, intensity
+  columns and their missingness — plus the two things the file cannot tell the
+  app: that the fold-change scale is *assumed* to be log2 and cannot be
+  verified, and that the statistical method is not supplied (OV-REP-04,
+  OV-NUM-08). Everything merely unusual is reported here rather than refused:
+  duplicate ids, infinite fold changes and adjusted p-values of exactly zero
+  all occur in legitimate exports. The reject/report split was checked against
+  30 real result files, one per research group; none trips a reject condition.
+- **A dimension-reduction retention panel** (audit OV-NUM-09). PCA and UMAP need
+  a complete matrix, so every feature missing in any selected sample is dropped
+  — routinely most of the data. A PCA of 400 features looks exactly as
+  convincing as one of 8,000, and the previous warning was a notification that
+  vanished after eight seconds. The panel is permanent, turns amber below 50%
+  retention, and shows per-sample missingness on demand. Because the loss is
+  rarely uniform, it also names the single sample whose exclusion would recover
+  the most features — usually the actionable fix.
+- **A downloadable session manifest** (audit OV-REP-04). Records the app version
+  and release date, the timestamp, the input file's name, size and SHA-256, the
+  detected comparisons, any upload warnings, and the R and package versions. It
+  is equally explicit about what it cannot certify — the search engine,
+  normalisation, imputation, statistical test, correction method, fold-change
+  base and per-module figure settings all happen outside the app. Claiming
+  provenance that does not exist would be worse than offering none.
+- **`validation/competitive_null_calibration.R`**, quantifying how far the 1D
+  enrichment p-values are from calibrated (audit OV-ENR-05). The module runs a
+  *competitive* Wilcoxon rank-sum test, which assumes features vary
+  independently — they do not, and co-regulation within a set is precisely what
+  makes it worth testing. On a null where nothing is truly shifted, the
+  rejection rate at a nominal 5% is **4.7–4.9%** when features really are
+  independent, but **16–54%** at a within-set correlation of only 0.05 and
+  **47–81%** at 0.3, worsening with set size. The Results table now carries
+  this explanation and quotes these figures; a test checks them against the
+  committed simulation output, so the claim and the measurement cannot drift
+  apart. Users are directed to treat the FDR column as a ranking device rather
+  than a false discovery rate. Full write-up in
+  `validation/competitive_null_calibration.md`.
 - Tests asserting that every module identifies the `id` column **by name, never
   by position**, using a fixture whose first column is `Genes`. This behaviour
   was correct as of v1.2.0 but untested — before the UpSet fix in that release,
   a table with `id` in any other position would have had its intersections
   keyed on the first column instead, silently disagreeing with every other view.
+
+### Fixed
+- **PCA loadings could be labelled with the wrong features.** A separate
+  reactive re-derived the loadings labels from the unfiltered table, mirroring
+  the complete-case logic but *not* the zero-variance drop applied inside a
+  scaled PCA. Whenever a scaled PCA dropped a constant feature the label vector
+  was longer than the rotation matrix: usually `cbind()` errored and took the
+  loadings table down, but when the two lengths happened to divide evenly it
+  recycled instead and every loading was silently attributed to the wrong
+  feature. Both outcomes were reproduced before fixing. The duplicated
+  derivation is removed rather than patched — `dr_data()` now returns the
+  matrix, its identifiers and the retention accounting together, and every
+  later row filter subsets the ids in lockstep.
 
 ## [1.2.0] - 2026-09-10
 
