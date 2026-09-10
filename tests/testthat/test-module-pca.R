@@ -42,7 +42,7 @@ test_that("PCA drops features with missing values and still runs", {
   b <- ov_bundle(d)
   testServer(pca_server, args = list(data = reactive(b)), {
     pca_inputs(session, b$intensity_cols)
-    expect_lt(nrow(dr_data()), 100)
+    expect_lt(nrow(dr_data()$mat), 100)
     expect_no_error(pca_results())
   })
 })
@@ -110,7 +110,7 @@ test_that("PCA loadings rows line up with the retained feature IDs", {
     pca_inputs(session, b$intensity_cols)
     session$setInputs(pca_x_pc = "PC1", pca_y_pc = "PC2")
     ld <- loadings_data()
-    expect_equal(nrow(ld), nrow(dr_data()))
+    expect_equal(nrow(ld), length(pca_results()$ids))
     expect_false(any(is.na(ld$Feature)))
     expect_true(all(ld$Feature %in% d$id))
   })
@@ -145,8 +145,8 @@ test_that("PCA row selection by ID subsets the feature matrix", {
   testServer(pca_server, args = list(data = reactive(b)), {
     pca_inputs(session, b$intensity_cols, row_selection = "selected",
                id_selection = paste(picked, collapse = ", "))
-    expect_equal(nrow(dr_data()), 20L)
-    expect_setequal(feature_ids(), picked)
+    expect_equal(nrow(dr_data()$mat), 20L)
+    expect_setequal(dr_data()$ids, picked)
   })
 })
 

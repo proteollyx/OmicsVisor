@@ -549,3 +549,61 @@ read_gmt <- function(path) {
   return(gene_sets)
 }
 
+
+
+# ─────────────────────────────────────────────────────────
+# Dimension-reduction retention accounting
+#
+# PCA and UMAP need a complete matrix, so every feature with a missing value
+# in any selected sample is dropped. With label-free proteomics this routinely
+# removes most of the data, and the loss is rarely uniform: one poorly
+# covered sample can be responsible for nearly all of it. A user who never
+# sees that number cannot tell a PCA computed on 8,000 features from one
+# computed on 400, and both look equally convincing (audit OV-NUM-09).
+#
+# Returns the accounting plus, for each sample, how many features would be
+# recovered by excluding that sample alone - the actionable diagnostic,
+# because the usual fix is to deselect one bad run rather than to impute.
+# ─────────────────────────────────────────────────────────
+ov_dr_retention <- function(mat) {
+  mat <- as.matrix(mat)
+  storage.mode(mat) <- "double"
+  n_in <- nrow(mat)
+
+  miss      <- !is.finite(mat)
+  n_missing <- rowSums(miss)
+  complete  <- n_missing == 0L
+  n_out     <- sum(complete)
+
+  # Features missing in exactly one sample are recoverable by dropping it.
+  one_off <- which(n_missing == 1L)
+  recover <- integer(ncol(mat))
+  names(recover) <- colnames(mat)
+  if (length(one_off)) {
+    culprit <- max.col(miss[one_off, , drop = FALSE], ties.method = "first")
+    tab     <- table(factor(culprit, levels = seq_len(ncol(mat))))
+    recover <- as.integer(tab)
+    names(recover) <- colnames(mat)
+  }
+
+  per_sample <- data.frame(
+    sample     = colnames(mat),
+    n_missing  = as.integer(colSums(miss)),
+    pct_missing = if (n_in > 0) 100 * colSums(miss) / n_in else numeric(ncol(mat)),
+    recoverable = recover,
+    stringsAsFactors = FALSE, row.names = NULL
+  )
+
+  worst <- if (nrow(per_sample) && max(per_sample$recoverable) > 0)
+             per_sample[which.max(per_sample$recoverable), ] else NULL
+
+  list(
+    n_in        = n_in,
+    n_complete  = n_out,
+    n_dropped   = n_in - n_out,
+    pct_retained = if (n_in > 0) 100 * n_out / n_in else NA_real_,
+    complete    = complete,
+    per_sample  = per_sample[order(-per_sample$n_missing), , drop = FALSE],
+    worst_sample = worst
+  )
+}

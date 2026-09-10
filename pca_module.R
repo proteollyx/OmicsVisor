@@ -127,6 +127,8 @@ pca_ui <- function(id) {
         column(4, downloadButton(ns("download_coords"), "Download Coordinates (CSV)"))
       ),
       
+      uiOutput(ns("dr_retention")),
+
       fluidRow(
         column(12, plotOutput(ns("pca_plot"), height = "600px"))
       ),
@@ -241,39 +243,44 @@ pca_server <- function(id, data) {
     # check.names = FALSE: without it make.names() silently rewrites any
     # non-syntactic sample name ("Imputed 1" -> "Imputed.1"), so the PCA
     # points end up labelled with something the user never chose.
+    # Capture the identifiers before subsetting to intensity columns, so that
+    # every downstream filter can carry them along instead of reconstructing
+    # them. A separate reactive that re-derived the ids used to drift out of
+    # step with the zero-variance filter below, mislabelling the loadings.
+    ids <- if ("id" %in% colnames(df)) as.character(df$id)
+           else as.character(seq_len(nrow(df)))
+
     df <- df[, input$intensity_columns, drop = FALSE]
     df <- as.data.frame(lapply(df, function(x) as.numeric(as.character(x))),
                         check.names = FALSE, stringsAsFactors = FALSE)
     names(df)    <- input$intensity_columns
     rownames(df) <- seq_len(nrow(df))
 
-    # Drop features (rows) with any missing value; PCA/UMAP require a complete matrix
-    n_before <- nrow(df)
-    df <- df[complete.cases(df), , drop = FALSE]
-    n_dropped <- n_before - nrow(df)
-    if (n_dropped > 0) {
-      showNotification(
-        paste0(n_dropped, " feature(s) with missing values excluded from ",
-               "dimension reduction (", nrow(df), " of ", n_before, " retained). ",
-               "Consider using imputed intensities for a complete matrix."),
-        type = "message", duration = 8
-      )
-    }
+    # PCA and UMAP require a complete matrix, so any feature with a missing
+    # value in any selected sample is dropped. How many that is, and which
+    # sample is responsible, is reported persistently beside the plot rather
+    # than in a notification that disappears (audit OV-NUM-09).
+    ret <- ov_dr_retention(df)
+    df  <- df[ret$complete, , drop = FALSE]
+    ids <- ids[ret$complete]
 
     validate(
       need(nrow(df) >= 3,
            paste0("Too few complete features for dimension reduction (",
-                  nrow(df), " remain after removing features with missing values). ",
-                  "Try selecting more samples or switch to imputed intensities."))
+                  nrow(df), " of ", ret$n_in,
+                  " remain after removing features with missing values). ",
+                  "Try selecting fewer samples, or switch to imputed intensities."))
     )
 
-    df
+    list(mat = df, ids = ids, retention = ret)
   })
   
   # ---- PCA results ----
   pca_results <- reactive({
     req(input$dr_method == "PCA")
-    df <- dr_data()
+    dd  <- dr_data()
+    df  <- dd$mat
+    ids <- dd$ids
 
     # Drop samples (columns) that are entirely non-finite (belt-and-suspenders)
     keep_cols <- vapply(df, function(x) any(is.finite(x)), logical(1))
@@ -300,7 +307,8 @@ pca_server <- function(id, data) {
           sprintf("%d zero-variance feature(s) excluded from the scaled PCA.",
                   sum(!keep_rows)),
           type = "warning", duration = 8)
-        df <- df[keep_rows, , drop = FALSE]
+        df  <- df[keep_rows, , drop = FALSE]
+        ids <- ids[keep_rows]          # keep labels in lockstep with rotation
       }
       validate(need(nrow(df) >= 3,
                     "Too few varying features remain for a scaled PCA. Uncheck
@@ -331,7 +339,7 @@ pca_server <- function(id, data) {
     var_explained <- round(100 * pca$sdev^2 / sum(pca$sdev^2), 1)
     names(var_explained) <- colnames(pca$x)
 
-    list(pca = pca, df = pca_df, var_explained = var_explained)
+    list(pca = pca, df = pca_df, var_explained = var_explained, ids = ids)
   })
   
   # Update PCA axis choices when PCA has been (re)computed
@@ -355,7 +363,7 @@ pca_server <- function(id, data) {
            "The 'umap' package is not installed. Please install.packages('umap').")
     )
     
-    df <- dr_data()
+    df <- dr_data()$mat
     keep_cols <- vapply(df, function(x) any(is.finite(x)), logical(1))
     df <- df[, keep_cols, drop = FALSE]
 
@@ -407,6 +415,68 @@ pca_server <- function(id, data) {
     umap_df
   })
   
+  # ---- Retention panel ----
+  # How much of the data the ordination is actually based on. Complete-case
+  # filtering can remove most features without the user noticing, and a PCA of
+  # 400 features looks exactly as convincing as one of 8,000 (audit OV-NUM-09).
+  output$dr_retention <- renderUI({
+    dd <- try(dr_data(), silent = TRUE)
+    if (inherits(dd, "try-error")) return(NULL)
+    r <- dd$retention
+
+    severe <- is.finite(r$pct_retained) && r$pct_retained < 50
+    accent <- if (severe) "#8a4b00" else "#1E3791"
+    bg     <- if (severe) "#FDF6EC" else "#F3F7FB"
+
+    worst <- r$worst_sample
+    advice <- if (!is.null(worst) && worst$recoverable > 0)
+      tags$div(
+        style = "margin-top:6px;",
+        sprintf("Excluding %s alone would recover %s feature%s (%.0f%% \u2192 %.0f%%).",
+                worst$sample, format(worst$recoverable, big.mark = ","),
+                if (worst$recoverable == 1) "" else "s",
+                r$pct_retained,
+                100 * (r$n_complete + worst$recoverable) / r$n_in))
+    else NULL
+
+    tagList(div(
+      style = sprintf(paste("border:1px solid #dbe4ee; border-left:4px solid %s;",
+                            "background:%s; border-radius:4px;",
+                            "padding:10px 14px; margin:4px 0 12px 0; font-size:0.92em;"),
+                      accent, bg),
+      tags$div(style = sprintf("font-weight:700; color:%s;", accent),
+               "Features used for dimension reduction"),
+      tags$div(
+        style = "margin-top:4px;",
+        sprintf("%s of %s features complete across the %d selected sample%s (%.1f%%).",
+                format(r$n_complete, big.mark = ","),
+                format(r$n_in,       big.mark = ","),
+                nrow(r$per_sample),
+                if (nrow(r$per_sample) == 1) "" else "s",
+                r$pct_retained),
+        if (r$n_dropped > 0)
+          sprintf(" %s dropped for missing values.", format(r$n_dropped, big.mark = ","))
+        else NULL
+      ),
+      advice,
+      if (r$n_dropped > 0) tags$details(
+        style = "margin-top:6px;",
+        tags$summary(style = "cursor:pointer; color:#1E3791;", "Missing values per sample"),
+        tags$table(
+          style = "margin-top:4px; border-collapse:collapse;",
+          tags$tr(lapply(c("Sample", "Missing", "%", "Recoverable"), function(h)
+            tags$th(style = "text-align:left; padding:1px 12px 1px 0; color:#555; font-weight:600;", h))),
+          apply(r$per_sample, 1, function(row) tags$tr(
+            tags$td(style = "padding:1px 12px 1px 0;", row[["sample"]]),
+            tags$td(style = "padding:1px 12px 1px 0;", format(as.integer(row[["n_missing"]]), big.mark = ",")),
+            tags$td(style = "padding:1px 12px 1px 0;", sprintf("%.1f", as.numeric(row[["pct_missing"]]))),
+            tags$td(style = "padding:1px 12px 1px 0;", format(as.integer(row[["recoverable"]]), big.mark = ","))
+          ))
+        )
+      ) else NULL
+    ))
+  })
+
   # ---- Colour scale ----
   # Every fixed palette is finite (Okabe-Ito has 8 colours, Brewer Set2 has 8,
   # Set1 has 9). With one group per sample a routine experiment exceeds that
@@ -557,35 +627,15 @@ pca_server <- function(id, data) {
       theme(axis.text.x = element_text(angle = 45, hjust = 1))
   }, width = 800, height = 300)
 
-  # ---- Feature IDs for PCA loadings ----
-  # Mirrors the row-filtering and complete.cases logic in dr_data() so that
-  # the i-th element maps to the i-th row of pca$rotation.
-  feature_ids <- reactive({
-    req(input$row_selection, input$intensity_columns)
-    df_full <- data()$data
-
-    if (input$row_selection == "selected" && nzchar(input$id_selection)) {
-      selected_ids <- trimws(strsplit(input$id_selection, ",")[[1]])
-      if ("id" %in% colnames(df_full))
-        df_full <- df_full[df_full$id %in% selected_ids, , drop = FALSE]
-    }
-
-    df_int <- df_full[, input$intensity_columns, drop = FALSE]
-    df_int <- as.data.frame(lapply(df_int, function(x) as.numeric(as.character(x))))
-    complete_idx <- complete.cases(df_int)
-
-    if ("id" %in% colnames(df_full)) df_full$id[complete_idx]
-    else as.character(seq_len(sum(complete_idx)))
-  })
-
   # ---- Full loadings matrix (features × all PCs) ----
   loadings_data <- reactive({
     req(input$dr_method == "PCA")
     res <- pca_results()
-    ids <- feature_ids()
     rot <- as.data.frame(res$pca$rotation)
-    rot <- cbind(Feature = ids, rot)
-    rot
+    # res$ids is produced by the same filtering that produced the rotation,
+    # so this can no longer silently recycle a mismatched label vector.
+    stopifnot(length(res$ids) == nrow(rot))
+    cbind(Feature = res$ids, rot)
   })
 
   # ---- Loadings table: top N from each selected PC ----
