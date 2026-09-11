@@ -9,6 +9,21 @@ must always match it (enforced by `tests/testthat/test-version.R`).
 
 ---
 
+## [Unreleased]
+
+### Fixed
+- **`renv.lock` carried corrupt Bioconductor repository URLs.** All five had the
+  literal string `TRUE` where the Bioconductor version belongs
+  (`https://bioconductor.org/packages/TRUE/bioc`), so any `renv::restore()` failed
+  with `invalid version specification 'TRUE'`. This was invisible in normal use —
+  every package was already installed, and none of the 117 comes from
+  Bioconductor, so the repositories were never consulted — but it meant the
+  lockfile could not actually be restored. The unused repositories are removed,
+  leaving CRAN. Found by the locked-environment CI job added in v1.4.0 on its
+  first run, which is precisely the class of rot that job exists to detect.
+
+---
+
 ## [1.4.0] - 2026-09-11
 
 **Release C of the September 2026 independent quality audit remediation**, and
