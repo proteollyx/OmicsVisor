@@ -59,6 +59,11 @@ pca_ui <- function(id) {
                      "plus any attributes you want to group by (condition, batch,",
                      "replicate). When supplied it replaces the component checkboxes",
                      "below.")),
+      div(style = "margin: 4px 0 10px 0;",
+          downloadButton(ns("download_metadata_template"),
+                         "Download metadata template (CSV)", class = "btn-sm"),
+          tags$span(style = "margin-left:8px; color:#555; font-size:0.85em;",
+                    "Pre-filled with your sample names and current grouping.")),
       uiOutput(ns("metadata_status")),
       uiOutput(ns("metadata_group_ui")),
 
@@ -269,6 +274,20 @@ pca_server <- function(id, data, register = NULL) {
   # What matched and what did not. A metadata file that silently applies to
   # half the samples would be worse than none, because the grouping would
   # still look deliberate.
+  # Seeded from the component selection, so the explicit table starts from the
+  # heuristic's best guess rather than a blank sheet.
+  output$download_metadata_template <- downloadHandler(
+    filename = function()
+      paste0("OmicsVisor_sample_metadata_template_", Sys.Date(), ".csv"),
+    content = function(file) {
+      samples <- input$intensity_columns %||% character(0)
+      cond <- tryCatch(group_annotations(), error = function(e) NULL)
+      if (!is.null(cond) && length(cond) != length(samples)) cond <- NULL
+      utils::write.csv(ov_metadata_template(samples, condition = cond),
+                       file, row.names = FALSE)
+    }
+  )
+
   output$metadata_status <- renderUI({
     if (is.null(input$sample_metadata)) return(NULL)
     m <- sample_metadata()

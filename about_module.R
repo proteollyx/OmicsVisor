@@ -56,12 +56,7 @@ about_ui <- function(id) {
               tags$li(
                 tags$a(href = "https://github.com/proteollyx/OmicsVisor",
                        "GitHub Repository", target = "_blank")
-              ),
-              # tags$li(
-              #   "OmicsVisor Assistant (ChatGPT): ",
-              #   tags$a(href = "https://chatgpt.com/g/g-W6cUieQY1-omicsvisor-assistant",
-              #          "OmicsVisor Assistant", target = "_blank")
-              # )
+              )
             )
           )
         )

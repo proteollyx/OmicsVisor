@@ -9,6 +9,35 @@ must always match it (enforced by `tests/testthat/test-version.R`).
 
 ---
 
+## [Unreleased]
+
+### Added
+- **Downloadable sample-metadata template** in PCA/UMAP and the heatmap,
+  seeded from the component checkboxes. The components already encode what the
+  user thinks distinguishes their samples, so the template arrives pre-filled
+  with the sample names and the grouping those checkboxes currently produce —
+  the explicit table is then corrected rather than authored from a blank sheet.
+  Blank `batch` and `replicate` columns are included deliberately: the header
+  documents what the upload accepts, and an empty `batch` column is a prompt to
+  record something that would otherwise go unrecorded. A test round-trips the
+  template through the reader, since a template whose output the reader
+  rejected would be worse than none.
+
+### Fixed
+- **`as.numeric()` on a factor returned level codes, not values.** A factor
+  column of `"0.01", "0.5", "0.9"` became `1, 2, 3`. This sat inside
+  `ov_is_hit()` — the shared hit rule — where it would have made every hit call
+  wrong across every module while looking entirely normal, and inside the
+  upload validator, where the resulting out-of-range values caused the file to
+  be **rejected as impossible when the impossibility was ours**. Now routed
+  through `ov_as_numeric()`, which goes via `as.character()` for factors.
+
+### Removed
+- The **OmicsVisor Assistant** (external ChatGPT link) from the Documentation
+  tab, and the dead commented-out reference in the About tab.
+
+---
+
 ## [1.4.1] - 2026-09-11
 
 A reproducibility fix only; no application behaviour changes. Released separately rather than folded into v1.4.0 because that tag is already

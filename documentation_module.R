@@ -144,11 +144,7 @@ documentation_ui <- function(id) {
       
       h3("Footnote: Imputed Intensities"),
       p("Imputation is performed in a controlled manner using a left-censored approach on a pre-filtered data frame so that not too many artificial values are introduced. 
-         These imputed intensities are optimised for statistical analyses (e.g. limma moderated t-tests), but should still be interpreted with appropriate caution in downstream plots."),
-      
-      h3("OmicsVisor Assistant"),
-      p("For additional guidance on OmicsVisor usage, interpretation of results or troubleshooting, you can also consult the OmicsVisor Assistant: ",
-        tags$a(href = "https://chatgpt.com/g/g-W6cUieQY1-omicsvisor-assistant", "OmicsVisor Assistant"), ".")
+         These imputed intensities are optimised for statistical analyses (e.g. limma moderated t-tests), but should still be interpreted with appropriate caution in downstream plots.")
   )
 }
 

@@ -244,3 +244,101 @@ test_that("the heatmap falls back to component parsing without metadata", {
     }
   )
 })
+
+# ── the downloadable template ───────────────────────────────────────────────
+# The component checkboxes already encode what the user thinks distinguishes
+# their samples. The template carries that across rather than making them
+# retype it, so the explicit table is corrected rather than authored.
+
+test_that("the template lists every sample and the documented attributes", {
+  t <- ov_metadata_template(INT)
+  expect_equal(t$sample, INT)
+  expect_equal(names(t), c("sample", "condition", "batch", "replicate"))
+  expect_true(all(t$condition == ""))
+})
+
+test_that("the template is seeded with the current grouping when there is one", {
+  t <- ov_metadata_template(INT, condition = c("WT", "WT", "KO", "KO"))
+  expect_equal(t$condition, c("WT", "WT", "KO", "KO"))
+  expect_true(all(t$batch == ""))      # blank columns are the prompt
+})
+
+test_that("a grouping of the wrong length is ignored rather than recycled", {
+  t <- ov_metadata_template(INT, condition = c("WT", "KO"))
+  expect_true(all(t$condition == ""))
+})
+
+test_that("the template round-trips through the metadata reader", {
+  # The point of the template is that what it produces is accepted. If these
+  # two ever disagree the feature is worse than useless.
+  p <- tempfile(fileext = ".csv")
+  utils::write.csv(ov_metadata_template(INT, condition = c("WT","WT","KO","KO")),
+                   p, row.names = FALSE)
+  m <- ov_read_sample_metadata(p, "template.csv", samples = INT)
+  expect_setequal(m$matched, INT)
+  expect_length(m$unmatched, 0)
+  expect_equal(ov_metadata_groups(m, INT, "condition"), c("WT", "WT", "KO", "KO"))
+})
+
+test_that("an empty sample list produces a header-only template, not an error", {
+  t <- ov_metadata_template(character(0))
+  expect_equal(nrow(t), 0)
+  expect_equal(names(t), c("sample", "condition", "batch", "replicate"))
+})
+
+test_that("PCA offers a template seeded from the component checkboxes", {
+  d <- data.frame(id = sprintf("P%03d", 1:30), stringsAsFactors = FALSE)
+  for (c in INT) d[[c]] <- rnorm(30, 20, 1)
+
+  shiny::testServer(
+    pca_server,
+    args = list(data = reactive(list(data = d, intensity_cols = INT))),
+    {
+      session$setInputs(dr_method = "PCA", intensity_columns = INT,
+                        row_selection = "all", id_selection = "",
+                        group_component_2 = TRUE)          # WT / KO
+      csv <- utils::read.csv(output$download_metadata_template,
+                             stringsAsFactors = FALSE)
+      expect_equal(csv$sample, INT)
+      expect_equal(csv$condition, c("WT", "WT", "KO", "KO"))
+      expect_true("batch" %in% names(csv))
+    }
+  )
+})
+
+test_that("the heatmap offers the same template", {
+  d <- data.frame(id = sprintf("P%03d", 1:30), stringsAsFactors = FALSE)
+  for (c in INT) d[[c]] <- rnorm(30, 20, 1)
+
+  shiny::testServer(
+    heatmap_server,
+    args = list(data = reactive(list(data = d, intensity_cols = INT))),
+    {
+      session$setInputs(intensity_columns = INT, scale_rows = FALSE,
+                        cluster_rows = FALSE, cluster_columns = FALSE,
+                        use_custom_limits = FALSE)
+      csv <- utils::read.csv(output$download_metadata_template,
+                             stringsAsFactors = FALSE)
+      expect_equal(csv$sample, INT)
+      expect_equal(names(csv), c("sample", "condition", "batch", "replicate"))
+    }
+  )
+})
+
+test_that("the template downloads before any grouping is chosen", {
+  d <- data.frame(id = sprintf("P%03d", 1:30), stringsAsFactors = FALSE)
+  for (c in INT) d[[c]] <- rnorm(30, 20, 1)
+
+  shiny::testServer(
+    pca_server,
+    args = list(data = reactive(list(data = d, intensity_cols = INT))),
+    {
+      session$setInputs(dr_method = "PCA", intensity_columns = INT,
+                        row_selection = "all", id_selection = "")
+      csv <- utils::read.csv(output$download_metadata_template,
+                             stringsAsFactors = FALSE, colClasses = "character")
+      expect_equal(csv$sample, INT)
+      expect_true(all(csv$condition == ""))
+    }
+  )
+})

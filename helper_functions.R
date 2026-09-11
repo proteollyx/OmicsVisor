@@ -2,6 +2,25 @@
 # OmicsVisor - Helper Functions
 # Author: Oliver Popp
 # ─────────────────────────────────────────────────────────
+# Safe numeric coercion
+#
+# as.numeric() on a factor returns the *level codes*, not the values: a
+# factor of c("0.01", "0.5", "0.9") becomes 1, 2, 3. That is silent, and
+# downstream it is indistinguishable from real data - adjusted p-values
+# become 1, 2, 3..., every hit call is wrong, and the upload validator
+# rejects the file as impossible when the impossibility is ours.
+#
+# Factors reach here from CSV/TSV metadata read with stringsAsFactors, from
+# user code, and from any upstream change in how a column is typed. Going
+# via as.character() costs nothing and removes the failure mode.
+# ─────────────────────────────────────────────────────────
+ov_as_numeric <- function(x) {
+  if (is.numeric(x)) return(x)
+  if (is.factor(x))  x <- as.character(x)
+  suppressWarnings(as.numeric(x))
+}
+
+# ─────────────────────────────────────────────────────────
 
 # Default-value operator.
 #
@@ -182,8 +201,8 @@ ov_is_hit <- function(logfc, padj, fc_cut, padj_cut,
                       direction = c("both", "up", "down")) {
   direction <- match.arg(direction)
 
-  logfc <- suppressWarnings(as.numeric(logfc))
-  padj  <- suppressWarnings(as.numeric(padj))
+  logfc <- ov_as_numeric(logfc)
+  padj  <- ov_as_numeric(padj)
 
   if (length(logfc) == 0L || length(padj) == 0L) return(logical(0))
   if (length(padj) == 1L)  padj  <- rep(padj,  length(logfc))
@@ -223,7 +242,7 @@ ov_is_hit <- function(logfc, padj, fc_cut, padj_cut,
 #' @return list(y = numeric vector safe to plot, n_invalid = count of values
 #'   outside [0, 1] or non-finite, which are returned as NA)
 ov_neglog10_padj <- function(p) {
-  p <- suppressWarnings(as.numeric(p))
+  p <- ov_as_numeric(p)
   invalid <- !is.na(p) & (!is.finite(p) | p < 0 | p > 1)
   p[invalid] <- NA_real_
   # floor at the smallest representable double so an exact zero plots at a
@@ -352,8 +371,8 @@ ov_inspect_upload <- function(df, int_regex = "^Imputed") {
   ctab <- NULL
   if (length(comps)) {
     rows <- lapply(comps, function(cmp) {
-      fc <- suppressWarnings(as.numeric(df[[paste0("logFC_", cmp)]]))
-      pv <- suppressWarnings(as.numeric(df[[paste0("adj.P.Val_", cmp)]]))
+      fc <- ov_as_numeric(df[[paste0("logFC_", cmp)]])
+      pv <- ov_as_numeric(df[[paste0("adj.P.Val_", cmp)]])
       bad <- sum(!is.na(pv) & (!is.finite(pv) | pv < 0 | pv > 1))
       if (bad > 0)
         fatal <<- c(fatal, sprintf(
@@ -1035,4 +1054,33 @@ ov_metadata_groups <- function(meta, samples, columns) {
                  character(1)), collapse = "_")
   }, character(1))
   lab
+}
+
+
+# ─────────────────────────────────────────────────────────
+# Sample metadata template
+#
+# The component checkboxes already encode the user's intent about what
+# distinguishes their samples. Rather than make them retype that into a
+# spreadsheet, the template is seeded with whatever the components currently
+# produce, so the explicit table starts from the heuristic's best guess and
+# is corrected rather than authored from scratch.
+#
+# Blank attribute columns are included deliberately: the header is the
+# documentation of what the upload accepts, and an empty "batch" column is a
+# prompt to record a batch that would otherwise go unrecorded.
+# ─────────────────────────────────────────────────────────
+ov_metadata_template <- function(samples, condition = NULL,
+                                 attributes = c("condition", "batch", "replicate")) {
+  samples <- as.character(samples %||% character(0))
+  out <- data.frame(sample = samples, stringsAsFactors = FALSE)
+  # rep() rather than a scalar: assigning "" to a zero-row frame errors with
+  # "replacement has 1 row, data has 0", and a header-only template is the
+  # right answer before any intensity columns have been selected.
+  for (a in attributes) out[[a]] <- rep("", length(samples))
+  if (!is.null(condition) && length(condition) == length(samples) &&
+      "condition" %in% attributes) {
+    out$condition <- as.character(condition)
+  }
+  out
 }
