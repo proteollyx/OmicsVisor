@@ -83,3 +83,70 @@ jobs:
             invisible(parse("app.R"))
             cat("all R files parse\n")
           '
+
+  # ── Exact reproducibility ──────────────────────────────────────────────────
+  # The matrix job above answers "does this still work with today's packages?".
+  # This one answers the different question the audit rightly separated
+  # (OV-REP-14): "does the environment the app was actually developed and
+  # deployed against still reproduce?" A failure here means the pinned
+  # environment has rotted; a failure above means an upstream package changed
+  # under us. Conflating the two makes neither answerable.
+  locked:
+    runs-on: ubuntu-latest
+    name: locked renv
+    timeout-minutes: 90
+
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+      R_KEEP_PKG_SOURCE: yes
+
+    steps:
+      - uses: actions/checkout@v5
+
+      # renv.lock pins R 4.6.0; use that exact version rather than "release",
+      # so a drift in what "release" means cannot silently change the answer.
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: '4.6.0'
+          use-public-rspm: true
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libcairo2-dev libxt-dev libcurl4-openssl-dev libssl-dev \
+            libxml2-dev libfontconfig1-dev libharfbuzz-dev libfribidi-dev \
+            libfreetype6-dev libpng-dev libtiff5-dev libjpeg-dev
+
+      # Restores the 117 pinned versions and caches them, so only a lockfile
+      # change pays the build cost.
+      - uses: r-lib/actions/setup-renv@v2
+
+      - name: Confirm the restored versions match the lockfile
+        run: |
+          Rscript -e '
+            cat(R.version.string, "\n")
+            lock <- renv::lockfile_read("renv.lock")$Packages
+            bad <- character(0)
+            for (nm in names(lock)) {
+              want <- lock[[nm]]$Version
+              got  <- tryCatch(utils::packageVersion(nm), error = function(e) NULL)
+              # Compare as versions, not strings: CRAN uses both "-" and "."
+              # as separators ("1.1-3") and as.character() on a version object
+              # normalises them, so a string comparison reports a dozen
+              # spurious mismatches.
+              ok <- !is.null(got) && got == numeric_version(want)
+              if (!ok)
+                bad <- c(bad, sprintf("%s: locked %s, installed %s", nm, want,
+                                      if (is.null(got)) "absent" else format(got)))
+            }
+            cat(sprintf("checked %d pinned packages\n", length(lock)))
+            if (length(bad)) {
+              cat("MISMATCHED:\n", paste(" ", bad, collapse = "\n"), "\n")
+              quit(status = 1)
+            }
+            cat("every package matches the lockfile\n")
+          '
+
+      - name: Run test suite against the pinned environment
+        run: Rscript tests/testthat.R
