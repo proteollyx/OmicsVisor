@@ -778,3 +778,140 @@ ov_manifest <- function(file_name = NULL, file_path = NULL, report = NULL,
     ""
   )
 }
+
+
+# ─────────────────────────────────────────────────────────
+# GCT reader (GenePattern 1.2 and 1.3)
+#
+# Audit finding OV-ENR-12: the previous reader carried the comment "should
+# theoretically support #1.3 - to be tested properly". It did not.
+#
+# GCT 1.3 layout, which is the part that was wrong:
+#
+#   #1.3
+#   <nrow> <ncol> <n row meta> <n col meta>
+#   id  <row meta names...>  <sample names...>
+#   <col meta name>  <blanks for row meta>  <values per sample>     x n col meta
+#   <row id>  <row meta...>  <values...>                            x nrow
+#
+# Column metadata rows come *before* the data rows. The previous reader took
+# the data first and the column metadata afterwards, so any 1.3 file that
+# actually carried column metadata had those metadata rows parsed as data.
+#
+# Reads the whole file and splits it, rather than advancing a connection in
+# stages: the declared dimensions can then be checked against what is
+# actually present instead of being trusted.
+# ─────────────────────────────────────────────────────────
+ov_read_gct <- function(path) {
+  lines <- readLines(path, warn = FALSE)
+  lines <- lines[!(seq_along(lines) > 1L & !nzchar(trimws(lines)))]  # keep line 1
+  if (!length(lines)) stop("Empty GCT file.", call. = FALSE)
+
+  version <- trimws(strsplit(lines[1], "\t", fixed = TRUE)[[1]][1])
+  if (!version %in% c("#1.2", "#1.3"))
+    stop("Unsupported or missing GCT version header: expected #1.2 or #1.3, found '",
+         substr(lines[1], 1, 20), "'.", call. = FALSE)
+  if (length(lines) < 3L)
+    stop("Truncated GCT file: expected a version line, a dimension line and a column header.",
+         call. = FALSE)
+
+  # strsplit() discards trailing empty fields, so a row ending in a tab - a
+  # blank final sample name, or a short final data row - would lose the field
+  # entirely and be reported as a dimension mismatch instead of the blank it
+  # is. Appending a sentinel and dropping it preserves trailing empties.
+  split_row <- function(x) {
+    f <- strsplit(paste0(x, "\t."), "\t", fixed = TRUE)[[1]]
+    f[-length(f)]
+  }
+  dims <- suppressWarnings(as.integer(split_row(trimws(lines[2]))))
+  dims <- dims[!is.na(dims)]
+
+  n_expected_dims <- if (version == "#1.2") 2L else 4L
+  if (length(dims) < n_expected_dims)
+    stop(sprintf("Malformed GCT %s dimension line: expected %d integers, found %d.",
+                 sub("^#", "", version), n_expected_dims, length(dims)), call. = FALSE)
+
+  n_row <- dims[1]; n_col <- dims[2]
+  n_rmeta <- if (version == "#1.3") dims[3] else 0L
+  n_cmeta <- if (version == "#1.3") dims[4] else 0L
+  if (version == "#1.2") n_rmeta <- 1L   # 1.2's Description column
+
+  if (is.na(n_row) || is.na(n_col) || n_row < 1L || n_col < 1L)
+    stop("GCT declares a non-positive number of rows or columns.", call. = FALSE)
+
+  hdr <- split_row(lines[3])
+  expected_hdr <- 1L + n_rmeta + n_col
+  if (length(hdr) != expected_hdr)
+    stop(sprintf(paste("GCT column header has %d fields but the declared dimensions",
+                       "require %d (1 id + %d metadata + %d samples)."),
+                 length(hdr), expected_hdr, n_rmeta, n_col), call. = FALSE)
+
+  warnings <- character(0)
+  samples <- hdr[(2L + n_rmeta):expected_hdr]
+  blank <- !nzchar(trimws(samples))
+  if (any(blank)) {
+    samples[blank] <- paste0("sample_", which(blank))
+    warnings <- c(warnings, sprintf(
+      "%d sample name(s) were blank and have been named %s.",
+      sum(blank), paste(samples[blank], collapse = ", ")))
+  }
+  if (anyDuplicated(samples)) {
+    warnings <- c(warnings, sprintf("Duplicate sample name(s): %s. Made unique.",
+                                    paste(unique(samples[duplicated(samples)]), collapse = ", ")))
+    samples <- make.unique(samples)
+  }
+
+  # Column metadata sits between the header and the data in 1.3.
+  body_start <- 4L + n_cmeta
+  col_meta <- NULL
+  if (n_cmeta > 0L) {
+    if (length(lines) < body_start - 1L)
+      stop(sprintf("GCT declares %d column metadata row(s) but the file ends before them.",
+                   n_cmeta), call. = FALSE)
+    cm <- lapply(lines[4:(3L + n_cmeta)], split_row)
+    col_meta <- as.data.frame(
+      lapply(cm, function(r) r[(2L + n_rmeta):min(length(r), expected_hdr)]),
+      stringsAsFactors = FALSE, col.names = vapply(cm, `[`, character(1), 1L))
+    rownames(col_meta) <- samples
+  }
+
+  data_lines <- lines[body_start:length(lines)]
+  if (length(data_lines) != n_row)
+    stop(sprintf("GCT declares %d data row(s) but %d %s present.",
+                 n_row, length(data_lines),
+                 if (length(data_lines) == 1L) "is" else "are"), call. = FALSE)
+
+  parts <- lapply(data_lines, split_row)
+  short <- lengths(parts) != expected_hdr
+  if (any(short))
+    stop(sprintf("GCT data row %d has %d fields but %d are required.",
+                 which(short)[1], lengths(parts)[which(short)[1]], expected_hdr),
+         call. = FALSE)
+
+  row_ids <- vapply(parts, `[`, character(1), 1L)
+  if (anyDuplicated(row_ids))
+    warnings <- c(warnings, sprintf(
+      paste("%d duplicate row identifier(s), e.g. '%s'. Scores are looked up by",
+            "name, so only the first occurrence of each is used."),
+      sum(duplicated(row_ids)), row_ids[duplicated(row_ids)][1]))
+
+  row_meta <- if (n_rmeta > 0L) {
+    rm <- as.data.frame(do.call(rbind, lapply(parts, function(r) r[2:(1L + n_rmeta)])),
+                        stringsAsFactors = FALSE)
+    names(rm) <- hdr[2:(1L + n_rmeta)]
+    rm
+  } else NULL
+
+  raw <- do.call(rbind, lapply(parts, function(r) r[(2L + n_rmeta):expected_hdr]))
+  mat <- suppressWarnings(matrix(as.numeric(raw), nrow = n_row, ncol = n_col,
+                                 dimnames = list(row_ids, samples)))
+  coerced <- sum(is.na(mat) & nzchar(trimws(raw)))
+  if (coerced > 0L)
+    warnings <- c(warnings, sprintf(
+      "%d non-numeric value(s) in the score matrix became missing.", coerced))
+  if (all(is.na(mat)))
+    stop("No numeric values could be read from the GCT score matrix.", call. = FALSE)
+
+  list(data = mat, row_meta = row_meta, col_meta = col_meta,
+       version = version, warnings = warnings)
+}

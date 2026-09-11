@@ -132,13 +132,15 @@ test_that("gct export round-trips through the 1D enrichment GCT reader", {
     file.copy(output$dl_gct, gct_path, overwrite = TRUE)
   })
 
-  # Read it back with the parser used by the 1D Enrichment module.
-  testServer(mod_pathway_1D_server, args = list(), {
-    parsed <- read_gct(gct_path)
-    expect_equal(colnames(parsed$data), lf)
-    expect_true(is.numeric(parsed$data))
-    expect_gt(nrow(parsed$data), 0)
-  })
+  # Read it back with the parser the 1D Enrichment module uses. This is the
+  # one test that holds the exporter and the reader to the same spec, so a
+  # change to either that breaks the pair fails here.
+  parsed <- ov_read_gct(gct_path)
+  expect_equal(colnames(parsed$data), lf)
+  expect_true(is.numeric(parsed$data))
+  expect_gt(nrow(parsed$data), 0)
+  expect_length(parsed$warnings, 0)
+  expect_equal(parsed$version, "#1.2")
 })
 
 test_that("gene column dropdown offers only gene-like columns", {

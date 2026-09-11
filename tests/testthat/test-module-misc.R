@@ -116,12 +116,26 @@ test_that("1D enrichment reads a GMT file and drops the description column", {
   })
 })
 
-test_that("1D enrichment rejects a file without a GCT version header", {
-  bad <- tempfile(fileext = ".gct")
-  writeLines(c("not a gct", "1\t1"), bad)
+test_that("1D enrichment surfaces GCT reader warnings to the user", {
+  # Rejection of malformed GCT files is covered exhaustively in
+  # test-gct-conformance.R against ov_read_gct(). What matters here is the
+  # module contract: a file that reads *with* caveats must not load silently.
+  p <- tempfile(fileext = ".gct")
+  writeLines(c("#1.3", "3\t2\t0\t0", "id\tS1\t",
+               "GENE01\t1.0\t2.0", "GENE01\t1.5\t2.5", "GENE03\t3.0\t4.0"), p)
+
+  notes <- character(0)
+  local_mocked_bindings(
+    showNotification = function(ui, ...) { notes <<- c(notes, as.character(ui)); invisible(NULL) },
+    .package = "shiny"
+  )
   testServer(mod_pathway_1D_server, args = list(), {
-    expect_error(read_gct(bad), "GCT version header")
+    session$setInputs(gct = list(name = "scores.gct", datapath = p))
+    g <- gct_data()
+    expect_equal(nrow(g$data), 3L)
   })
+  expect_true(any(grepl("duplicate row identifier", notes)))
+  expect_true(any(grepl("blank", notes)))
 })
 
 test_that("1D enrichment detects a planted up-shifted gene set", {

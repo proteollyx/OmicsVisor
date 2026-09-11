@@ -14,7 +14,7 @@ mod_pathway_1D_ui <- function(id, title = "1D Enrichment") {
         width = 3,
         h3(title),
         fileInput(ns("gmt"), "Upload GMT file", accept = ".gmt"),
-        fileInput(ns("gct"), "Upload GCT file (v1.2/1.3)", accept = ".gct"),
+        fileInput(ns("gct"), "Upload GCT file (v1.2 or v1.3)", accept = ".gct"),
         uiOutput(ns("col_picker")),
         hr(),
         numericInput(ns("minsz"), "Min set size", value = 5, min = 1, step = 1),
@@ -127,7 +127,10 @@ mod_pathway_1D_ui <- function(id, title = "1D Enrichment") {
                 tags$li(tags$b("Bubble plot:")),
                 tags$ul(
                   tags$li("Always applies the FDR cutoff (only significant sets shown)."),
-                  tags$li("Point size = overlap % (", tags$i("size_overlap / size_total"), "), i.e., how much of the set participates."),
+                  tags$li("Point size = ", tags$b("set coverage"), " \u2014 measured members / original GMT members (",
+                          tags$i("size_overlap / size_total"), "). A set whose members were mostly not quantified ",
+                          "is tested on the few that were, and a small bubble is the warning that the result ",
+                          "rests on a fraction of the set rather than on the pathway as annotated."),
                   tags$li("Purpose: emphasis on magnitude + coverage among significant sets.")
                 )
               )
@@ -147,6 +150,16 @@ mod_pathway_1D_server <- function(id, register = NULL) {
   moduleServer(id, function(input, output, session) {
 
     observe({
+      # The gene-set database is recorded by name, size and content hash.
+      # MSigDB sets change between releases, so "REACTOME_..." alone does not
+      # identify what was actually tested; two runs a year apart can give
+      # different answers from the same code (audit OV-ENR-12).
+      gmt_id <- if (is.null(input$gmt)) NULL else input$gmt$name
+      gmt_sha <- if (is.null(input$gmt)) NULL else
+        tryCatch(substr(digest::digest(file = input$gmt$datapath, algo = "sha256"), 1, 16),
+                 error = function(e) NULL)
+      n_sets <- tryCatch(length(gmt_sets()), error = function(e) NULL)
+
       ov_register_settings(register, "1D Enrichment", list(
         test           = "competitive Wilcoxon rank-sum (set vs all other features)",
         alternative    = input$alt,
@@ -154,6 +167,11 @@ mod_pathway_1D_server <- function(id, register = NULL) {
         FDR_cutoff     = input$fdr,
         min_set_size   = input$minsz,
         max_set_size   = input$maxsz,
+        gene_set_file  = gmt_id,
+        gene_set_sha256 = gmt_sha,
+        gene_sets_read = n_sets,
+        score_file     = if (is.null(input$gct)) NULL else input$gct$name,
+        score_column   = input$col,
         calibration    = "p-values not calibrated under within-set correlation; see validation/competitive_null_calibration.md"
       ))
     })
@@ -196,56 +214,6 @@ mod_pathway_1D_server <- function(id, register = NULL) {
         stringsAsFactors = FALSE
       )
       sets
-    }
-    
-    read_gct <- function(path) { # should theoretically support #1.3 - to be tested properly
-      con <- file(path, open = "r")
-      on.exit(close(con), add = TRUE)
-      header <- readLines(con, n = 1L, warn = FALSE)
-      if (!length(header)) stop("Empty GCT file.")
-      if (!grepl("^#1\\.[23]", header)) stop("Unsupported or missing GCT version header (#1.2 or #1.3 expected).")
-      dims <- scan(con, what = character(), nlines = 1L, quiet = TRUE)
-      if (header == "#1.2") {
-        if (length(dims) < 2L) stop("Malformed GCT 1.2 header line.")
-        nrow <- as.integer(dims[1])
-        ncol <- as.integer(dims[2])
-        hdr <- readLines(con, n = 1L, warn = FALSE)
-        cols <- strsplit(hdr, "\t", fixed = TRUE)[[1]]
-        if (length(cols) != (2L + ncol)) stop("Column count mismatch vs GCT 1.2 header.")
-        tab <- read.delim(con, header = FALSE, stringsAsFactors = FALSE, quote = "", comment.char = "", nrows = nrow)
-        if (ncol(tab) != (2L + ncol)) stop("Data column count mismatch in GCT body.")
-        row_ids <- tab[[1]]
-        row_desc <- tab[[2]]
-        mat <- as.matrix(tab[, -(1:2)])
-        storage.mode(mat) <- "numeric"
-        rownames(mat) <- row_ids
-        colnames(mat) <- cols[-(1:2)]
-        list(data = mat, row_meta = data.frame(id = row_ids, desc = row_desc, stringsAsFactors = FALSE), col_meta = NULL)
-      } else {
-        if (length(dims) < 4L) stop("Malformed GCT 1.3 header line.")
-        nrow <- as.integer(dims[1])
-        ncol <- as.integer(dims[2])
-        nrmeta <- as.integer(dims[3])
-        ncmeta <- as.integer(dims[4])
-        hdr <- readLines(con, n = 1L, warn = FALSE)
-        cols <- strsplit(hdr, "\t", fixed = TRUE)[[1]]
-        tab <- read.delim(con, header = FALSE, stringsAsFactors = FALSE, quote = "", comment.char = "", nrows = nrow)
-        row_id <- tab[[1]]
-        row_meta <- if (nrmeta > 0) tab[, 2:(1+nrmeta), drop = FALSE] else NULL
-        mat <- as.matrix(tab[, (2+nrmeta):(1+nrmeta+ncol), drop = FALSE])
-        storage.mode(mat) <- "numeric"
-        rownames(mat) <- row_id
-        col_meta <- NULL
-        if (ncmeta > 0) {
-          col_meta_raw <- read.delim(con, header = FALSE, stringsAsFactors = FALSE, quote = "", comment.char = "", nrows = ncmeta)
-          field <- col_meta_raw[[1]]
-          vals  <- as.data.frame(t(col_meta_raw[, -1, drop = FALSE]), stringsAsFactors = FALSE)
-          colnames(vals) <- field
-          col_meta <- vals
-        }
-        if (length(cols) >= (1 + nrmeta + ncol)) colnames(mat) <- cols[(2+nrmeta):(1+nrmeta+ncol)]
-        list(data = mat, row_meta = row_meta, col_meta = col_meta)
-      }
     }
     
     # ---- Core stats ----
@@ -350,7 +318,11 @@ mod_pathway_1D_server <- function(id, register = NULL) {
     
     gct_data <- reactive({
       req(input$gct)
-      read_gct(input$gct$datapath)
+      # ov_read_gct() lives in helper_functions.R so it can be tested against
+      # the GenePattern reference fixtures (audit OV-ENR-12).
+      g <- ov_read_gct(input$gct$datapath)
+      for (w in g$warnings) showNotification(w, type = "warning", duration = 14)
+      g
     })
     
     output$col_picker <- renderUI({
@@ -500,7 +472,7 @@ mod_pathway_1D_server <- function(id, register = NULL) {
             stroke  = 0.3
           )
         ) +
-        scale_size_continuous(name = "Overlap (%)", range = input$bub_range) +
+        scale_size_continuous(name = "Set coverage (%)", range = input$bub_range) +
         col_info$layers +
         labs(
           title = "Significant pathways — bubble plot",
@@ -607,7 +579,7 @@ mod_pathway_1D_server <- function(id, register = NULL) {
               stroke  = 0.3
             )
           ) +
-          scale_size_continuous(name = "Overlap (%)", range = input$bub_range) +
+          scale_size_continuous(name = "Set coverage (%)", range = input$bub_range) +
           col_info$layers +
           labs(title = "Significant pathways — bubble plot",
                         subtitle = sprintf("FDR \u2264 %.3g; TopN = %s", input$fdr, ifelse(input$topn > 0, input$topn, "all")),
