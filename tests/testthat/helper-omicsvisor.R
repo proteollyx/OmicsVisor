@@ -275,3 +275,54 @@ build_plotly <- function(p) {
 # Inside shiny::testServer() reading `output$foo` for a downloadHandler already
 # runs the content function and returns the path of the written file, so tests
 # assert on the path directly rather than invoking the handler themselves.
+
+
+#' An HYE124-shaped fixture with known species ratios, for sign conventions.
+#'
+#' The LFQBench HYE124 design mixes three proteomes at fixed, published
+#' proportions. Sample A is 65% human / 30% yeast / 5% E. coli; sample B is
+#' 65% human / 15% yeast / 20% E. coli. So for A over B the true ratios are
+#' human 1:1, yeast 2:1 and E. coli 1:4, giving log2 fold changes of exactly
+#' 0, +1 and -2.
+#'
+#' That makes the dataset an oracle for one specific question, which is the
+#' one the response to the audit scoped it to (section 3.7): are fold-change
+#' signs and axis directions correct end to end? It deliberately does not
+#' test quantitative accuracy, which would principally test the upstream
+#' pipeline rather than anything OmicsVisor does.
+#'
+#' Synthetic rather than the real download: the ratios are the oracle, and
+#' they are known by design, so measured data would add noise without adding
+#' information about sign handling.
+#'
+#' @param n_per_species features per species
+#' @param jitter        sd of noise added to each feature's logFC
+#' @param seed          RNG seed
+hye124_fixture <- function(n_per_species = 40L, jitter = 0.05, seed = 124L) {
+  set.seed(seed)
+  species <- rep(c("HUMAN", "YEAST", "ECOLI"), each = n_per_species)
+  true_lfc <- rep(c(0, 1, -2), each = n_per_species)   # log2(A/B)
+
+  n <- length(species)
+  df <- data.frame(
+    id    = sprintf("%s_%03d", species, rep(seq_len(n_per_species), 3)),
+    Genes = sprintf("%s_%03d", species, rep(seq_len(n_per_species), 3)),
+    species  = species,
+    true_lfc = true_lfc,
+    stringsAsFactors = FALSE
+  )
+
+  df$logFC_A.over.B <- true_lfc + stats::rnorm(n, 0, jitter)
+  # Human is the null population, so it must not clear a fold-change cutoff;
+  # yeast and E. coli are real changes and must.
+  df$adj.P.Val_A.over.B <- ifelse(species == "HUMAN",
+                                  stats::runif(n, 0.2, 0.9),
+                                  stats::runif(n, 1e-8, 1e-4))
+  df$t_A.over.B       <- df$logFC_A.over.B / 0.1
+  df$P.Value_A.over.B <- df$adj.P.Val_A.over.B / 2
+
+  for (i in 1:3) df[[sprintf("Imputed.A_%02d", i)]] <- 20 + true_lfc + stats::rnorm(n, 0, jitter)
+  for (i in 1:3) df[[sprintf("Imputed.B_%02d", i)]] <- 20 + stats::rnorm(n, 0, jitter)
+
+  df
+}
