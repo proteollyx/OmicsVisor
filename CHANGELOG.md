@@ -22,6 +22,27 @@ must always match it (enforced by `tests/testthat/test-version.R`).
   leaving CRAN. Found by the locked-environment CI job added in v1.4.0 on its
   first run, which is precisely the class of rot that job exists to detect.
 
+  The source was twofold. `renv/settings.json` carried
+  `"bioconductor.version": "TRUE"`, and R's own `etc/repositories` file
+  templates the Bioconductor version into five BioC URLs — a substitution that
+  yields `TRUE` on this R build. `renv::snapshot()` records
+  `getOption("repos")` verbatim, so the unusable URLs reached the lockfile. The
+  setting is cleared, and `.Rprofile` now pins CRAN explicitly after renv
+  activation so the project cannot inherit the defect again.
+
+  **OmicsVisor requires no Bioconductor packages.** All 23 non-base packages it
+  references are on CRAN, and all 117 lockfile entries have source
+  `Repository`. If a Bioconductor package is ever genuinely needed, the
+  repository should be added to `.Rprofile` with a real version.
+
+### Added
+- `tests/testthat/test-lockfile-integrity.R`, which makes the lockfile's
+  usability checkable in seconds rather than only by a 90-minute restore:
+  repository URLs must be well-formed and version-resolved, every declared
+  repository must actually be cited by a package (an unused repository is where
+  this rot hid), every package must record a version and source, the test
+  dependencies must be pinned, and `renv` must be able to read the result.
+
 ---
 
 ## [1.4.0] - 2026-09-11
