@@ -915,3 +915,44 @@ ov_read_gct <- function(path) {
   list(data = mat, row_meta = row_meta, col_meta = col_meta,
        version = version, warnings = warnings)
 }
+
+
+# ─────────────────────────────────────────────────────────
+# Heatmap colour semantics (audit OV-VIZ / 2.9)
+#
+# A diverging palette asserts that its midpoint means something. For row
+# z-scores it does - zero is the row mean, and blue/red then reads as
+# below/above average. For raw log intensities it does not: white lands
+# wherever the data happen to be centred, so the same protein changes colour
+# depending on which samples are on screen. Unscaled data therefore gets a
+# sequential palette, where only order is implied.
+# ─────────────────────────────────────────────────────────
+ov_heatmap_palette <- function(scaled = FALSE, n = 100L) {
+  if (isTRUE(scaled))
+    grDevices::colorRampPalette(c("darkblue", "white", "firebrick"))(n)
+  else
+    grDevices::colorRampPalette(c("#F7FCF0", "#7BCCC4", "#0868AC", "#084081"))(n)
+}
+
+# Distance and linkage were fixed at Euclidean/complete. Both change the
+# dendrogram, and therefore which groups a reader sees, so both are now
+# chosen by the user and recorded in the manifest.
+OV_HEATMAP_DISTANCES <- c("euclidean", "manhattan", "maximum", "canberra",
+                          "1 - Pearson r" = "pearson",
+                          "1 - Spearman r" = "spearman")
+OV_HEATMAP_LINKAGES  <- c("complete", "average", "ward.D2", "single",
+                          "centroid", "mcquitty", "median")
+
+ov_cluster_dist <- function(mat, method = "euclidean") {
+  if (method %in% c("pearson", "spearman")) {
+    # Correlation across the other margin, turned into a distance. Features
+    # with no variance have undefined correlation; treat them as maximally
+    # distant rather than letting NA take down hclust().
+    cm <- suppressWarnings(stats::cor(t(mat), method = method,
+                                      use = "pairwise.complete.obs"))
+    cm[!is.finite(cm)] <- 0
+    stats::as.dist(1 - cm)
+  } else {
+    stats::dist(mat, method = method)
+  }
+}

@@ -44,6 +44,17 @@ heatmap_ui <- function(id) {
       
       checkboxInput(ns("cluster_columns"), "Cluster Columns", value = TRUE),
       checkboxInput(ns("cluster_rows"), "Cluster Rows", value = TRUE),
+      conditionalPanel(
+        condition = sprintf("input['%s'] || input['%s']",
+                            ns("cluster_rows"), ns("cluster_columns")),
+        selectInput(ns("dist_method"), "Distance measure:",
+                    choices = OV_HEATMAP_DISTANCES, selected = "euclidean"),
+        selectInput(ns("linkage"), "Linkage:",
+                    choices = OV_HEATMAP_LINKAGES, selected = "complete"),
+        helpText(paste("Distance and linkage both change the dendrogram, and so",
+                       "change which groups appear to cluster together. Both are",
+                       "recorded in the session manifest."))
+      ),
       checkboxInput(ns("scale_rows"), "Scale by Row (Z-score)", value = FALSE),
 
       hr(),
@@ -79,7 +90,12 @@ heatmap_server <- function(id, data, register = NULL) {
         cluster_rows      = input$cluster_rows,
         cluster_columns   = input$cluster_columns,
         intensity_columns = length(input$intensity_columns %||% character(0)),
-        custom_colour_limits = input$use_custom_limits
+        custom_colour_limits = input$use_custom_limits,
+        distance          = input$dist_method,
+        linkage           = input$linkage,
+        colour_scale      = if (isTRUE(input$scale_rows))
+                              "diverging, centred on the row mean"
+                            else "sequential (no meaningful midpoint)"
       ))
     })
 
@@ -268,7 +284,8 @@ heatmap_server <- function(id, data, register = NULL) {
     # Column clustering — graceful fallback if dist() fails due to missing values
     if (input$cluster_columns) {
       col_dend <- tryCatch(
-        hclust(dist(t(mat))),
+        hclust(ov_cluster_dist(t(mat), input$dist_method %||% "euclidean"),
+               method = input$linkage %||% "complete"),
         error = function(e) {
           showNotification(
             paste0("Column clustering failed (", conditionMessage(e), "). ",
@@ -288,7 +305,8 @@ heatmap_server <- function(id, data, register = NULL) {
     # Row clustering — graceful fallback if dist() fails due to missing values
     if (input$cluster_rows) {
       row_dend <- tryCatch(
-        hclust(dist(mat)),
+        hclust(ov_cluster_dist(mat, input$dist_method %||% "euclidean"),
+               method = input$linkage %||% "complete"),
         error = function(e) {
           showNotification(
             paste0("Row clustering failed (", conditionMessage(e), "). ",
@@ -334,7 +352,7 @@ heatmap_server <- function(id, data, register = NULL) {
       rownames(col_annot) <- colnames(mat)
     }
 
-    colour_palette <- colorRampPalette(c("darkblue", "white", "firebrick"))(100)
+    colour_palette <- ov_heatmap_palette(scaled = isTRUE(input$scale_rows))
     breaks <- color_breaks()
 
     # Clamp font sizes: values outside [4, 20] can produce negative pheatmap
@@ -421,7 +439,7 @@ heatmap_server <- function(id, data, register = NULL) {
       }
       
       # color palette
-      colour_palette <- colorRampPalette(c("darkblue", "white", "firebrick"))(100)
+      colour_palette <- ov_heatmap_palette(scaled = isTRUE(input$scale_rows))
       breaks <- color_breaks()
       
       pheatmap::pheatmap(

@@ -67,7 +67,18 @@ pca_ui <- function(id) {
           )
         ),
         checkboxInput(ns("pca_center"), "Center data", value = TRUE),
-        checkboxInput(ns("pca_scale"),  "Scale data",  value = TRUE)
+        # Default changed to FALSE in v1.4.0 (audit 2.8). Autoscaling gives a
+        # protein with negligible dynamic range the same weight as a highly
+        # variable one; for already-normalised log intensities, centring alone
+        # is the better default, and it is what prcomp() itself defaults to.
+        # The setting is printed on the plot and recorded in the manifest, so
+        # a figure can always be traced to the choice that produced it.
+        checkboxInput(ns("pca_scale"),  "Scale data (unit variance per feature)",
+                      value = FALSE),
+        helpText(paste("Scaling weights every feature equally regardless of its",
+                       "dynamic range. For normalised log intensities, leaving it",
+                       "off is usually the better choice. Changed from on to off",
+                       "in v1.4.0; the active setting is shown on the plot."))
       ),
       
       # ---- UMAP-specific options ----
@@ -111,10 +122,11 @@ pca_ui <- function(id) {
           "ggplot2 default"   = "ggplot",
           "Brewer Set1"       = "set1",
           "Brewer Set2"       = "set2",
-          "Okabe-Ito (CB-friendly)" = "okabe"
+          "Okabe-Ito (colourblind-safe up to 8 groups)" = "okabe"
         ),
         selected = "combined"
       ),
+      uiOutput(ns("palette_note")),
       
       # ---- Download & plot options ----
       numericInput(ns("pdf_width"),  "Plot Width",  value = 8, min = 4),
@@ -171,7 +183,8 @@ pca_server <- function(id, data, register = NULL) {
         umap_n_neighbors   = if (identical(input$dr_method, "UMAP")) input$umap_n_neighbors else NULL,
         umap_min_dist      = if (identical(input$dr_method, "UMAP")) input$umap_min_dist else NULL,
         features_retained  = if (is.null(ret)) NULL else ret$n_complete,
-        features_excluded  = if (is.null(ret)) NULL else ret$n_dropped
+        features_excluded  = if (is.null(ret)) NULL else ret$n_dropped,
+        colour_palette     = input$color_scheme
       ))
     })
 
@@ -577,6 +590,32 @@ pca_server <- function(id, data, register = NULL) {
 
     scale_color_manual(values = ov_expand_palette(base_cols, n))
   }
+
+  # Okabe-Ito is colourblind-safe because of the specific eight colours it
+  # contains. Interpolating past eight keeps the plot from failing but
+  # produces intermediate colours the palette never claimed to distinguish,
+  # so the accessibility guarantee no longer holds. The audit was right that
+  # this needs saying rather than being silently inherited.
+  output$palette_note <- renderUI({
+    n <- tryCatch({
+      d <- if (identical(input$dr_method, "UMAP")) umap_results() else pca_results()$df
+      length(unique(d$Group))
+    }, error = function(e) NA_integer_)
+
+    if (is.na(n)) return(NULL)
+    cap <- switch(input$color_scheme %||% "combined",
+                  okabe = 8L, set2 = 8L, set1 = 9L, NA_integer_)
+    if (is.na(cap) || n <= cap) return(NULL)
+
+    div(style = paste("border-left:3px solid #8a4b00; background:#FDF6EC;",
+                      "padding:6px 10px; margin:4px 0 8px 0; font-size:0.88em;",
+                      "color:#8a4b00;"),
+        sprintf(paste("%d groups exceed this palette's %d distinct colours.",
+                      "The extra colours are interpolated, so the palette's",
+                      "colourblind-safe property no longer holds. Consider",
+                      "fewer groups for a figure that must be accessible."),
+                n, cap))
+  })
   
   # ---- Unified plotting function ----
   create_dr_plot <- reactive({
@@ -606,7 +645,15 @@ pca_server <- function(id, data, register = NULL) {
         labs(
           x = x_label,
           y = y_label,
-          title = sprintf("PCA Plot (%s vs %s)", x_pc, y_pc)
+          title = sprintf("PCA Plot (%s vs %s)", x_pc, y_pc),
+          # Which preprocessing produced this plot, stated on the plot. Two
+          # PCAs of the same data with different scaling can look entirely
+          # different, and the figure is what outlives the session.
+          subtitle = sprintf("%s \u00b7 %s \u00b7 %s features",
+                             if (isTRUE(input$pca_center)) "centred" else "not centred",
+                             if (isTRUE(input$pca_scale)) "scaled to unit variance"
+                             else "not scaled",
+                             format(nrow(res$pca$rotation), big.mark = ","))
         ) +
         theme_minimal() +
         col_scale
