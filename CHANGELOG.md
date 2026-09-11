@@ -26,7 +26,14 @@ restored.
   leaving CRAN. Found by the locked-environment CI job added in v1.4.0 on its
   first run, which is precisely the class of rot that job exists to detect.
 
-  The source was twofold. `renv/settings.json` carried
+  `renv.lock` also carries a **top-level `Bioconductor` block** holding
+  `"Version": "TRUE"`, separate from the repository URLs — and that is the field
+  `renv::restore()` actually resolves. The first fix cleaned only the URLs, so
+  the CI job failed identically on the next run. Both are now removed, and the
+  integrity test checks the whole lockfile for a bare `TRUE` where a version
+  belongs rather than the two places that seemed likely.
+
+  The remaining source was twofold. `renv/settings.json` carried
   `"bioconductor.version": "TRUE"`, and R's own `etc/repositories` file
   templates the Bioconductor version into five BioC URLs — a substitution that
   yields `TRUE` on this R build. `renv::snapshot()` records

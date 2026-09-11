@@ -44,6 +44,31 @@ test_that("no repository is declared that no package comes from", {
   expect_setequal(names_declared, used)
 })
 
+test_that("no Bioconductor version is declared, or it is a real version", {
+  # The defect the first fix missed. renv.lock carries a *top-level*
+  # "Bioconductor": {"Version": ...} block, separate from the repository URLs,
+  # and that is the field renv::restore() resolves. Cleaning only the URLs left
+  # "Version": "TRUE" in place, so the restore failed identically the second
+  # time. Nothing in the project needs Bioconductor, so the block should be
+  # absent; if it is ever present it must be a version, not a flag.
+  l <- lock()
+  v <- l$Bioconductor$Version
+  if (is.null(v)) { succeed(); return() }
+  expect_match(as.character(v), "^[0-9]+\\.[0-9]+$",
+               info = paste("Bioconductor$Version is", as.character(v)))
+})
+
+test_that("no lockfile field anywhere holds a bare TRUE where a version belongs", {
+  # Stated as a whole-file invariant rather than field by field, because the
+  # first version of this guard checked the two places I happened to think of
+  # and the real one was a third.
+  p <- testthat::test_path("..", "..", "renv.lock")
+  skip_if_not(file.exists(p))
+  txt <- readLines(p, warn = FALSE)
+  offenders <- grep('"Version"\\s*:\\s*"(TRUE|FALSE|NA|NULL)"', txt, value = TRUE)
+  expect_length(offenders, 0)
+})
+
 test_that("the lockfile declares an R version and a package set", {
   l <- lock()
   expect_match(l$R$Version, "^[0-9]+\\.[0-9]+\\.[0-9]+$")
