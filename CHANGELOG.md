@@ -32,6 +32,17 @@ must always match it (enforced by `tests/testthat/test-version.R`).
   be **rejected as impossible when the impossibility was ours**. Now routed
   through `ov_as_numeric()`, which goes via `as.character()` for factors.
 
+### Changed
+- **The About tab no longer embeds the whole changelog.** It was rendered as
+  raw, unwrapped markdown — 872 lines carrying audit finding IDs and literal
+  `##` and `**` — which accounted for **21% of every page load** and told a
+  user nothing they could act on. In its place: a short *Changes that affect
+  your results* section naming the only two releases that alter output
+  (inclusive cutoffs in v1.2.0, the PCA scaling default in v1.4.0), the newest
+  release section, and a link to the full changelog on GitHub. A test asserts
+  the versions named there still exist in `CHANGELOG.md`, so the summary
+  cannot drift from what it summarises.
+
 ### Removed
 - The **OmicsVisor Assistant** (external ChatGPT link) from the Documentation
   tab, and the dead commented-out reference in the About tab.
