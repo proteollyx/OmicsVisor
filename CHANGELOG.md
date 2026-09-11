@@ -9,7 +9,11 @@ must always match it (enforced by `tests/testthat/test-version.R`).
 
 ---
 
-## [Unreleased]
+## [1.4.1] - 2026-09-11
+
+A reproducibility fix only; no application behaviour changes. Released separately rather than folded into v1.4.0 because that tag is already
+public, and archiving it would have preserved a lockfile that cannot be
+restored.
 
 ### Fixed
 - **`renv.lock` carried corrupt Bioconductor repository URLs.** All five had the

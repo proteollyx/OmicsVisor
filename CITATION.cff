@@ -17,7 +17,7 @@ repository-code: "https://github.com/proteollyx/OmicsVisor"
 url: "https://github.com/proteollyx/OmicsVisor"
 license: MIT
 doi: 10.5281/zenodo.22660844
-version: 1.4.0
+version: 1.4.1
 date-released: "2026-09-11"
 keywords:
   - proteomics
