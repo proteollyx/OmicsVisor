@@ -70,8 +70,19 @@ heatmap_ui <- function(id) {
   )
 }
 
-heatmap_server <- function(id, data) {
+heatmap_server <- function(id, data, register = NULL) {
   moduleServer(id, function(input, output, session) {
+
+    observe({
+      ov_register_settings(register, "Heatmap", list(
+        row_z_score       = input$scale_rows,
+        cluster_rows      = input$cluster_rows,
+        cluster_columns   = input$cluster_columns,
+        intensity_columns = length(input$intensity_columns %||% character(0)),
+        custom_colour_limits = input$use_custom_limits
+      ))
+    })
+
   ns <- session$ns
 
   # Track order in which grouping components are selected (for columns)

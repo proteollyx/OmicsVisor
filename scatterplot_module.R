@@ -49,8 +49,19 @@ scatterplot_ui <- function(id) {
   )
 }
 
-scatterplot_server <- function(id, data) {
+scatterplot_server <- function(id, data, register = NULL) {
   moduleServer(id, function(input, output, session) {
+
+    observe({
+      ov_register_settings(register, "logFC Scatter", list(
+        x_axis       = input$x_logfc,
+        y_axis       = input$y_logfc,
+        logFC_cutoff = input$logfc_cutoff,
+        adj_P_cutoff = input$pval_cutoff,
+        boundaries   = "inclusive (|logFC| >= cutoff, adj.P <= cutoff)"
+      ))
+    })
+
   
   # Populate logFC selection inputs
   observe({

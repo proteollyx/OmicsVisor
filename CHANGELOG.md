@@ -45,14 +45,27 @@ because the input contract is unchanged; only its enforcement is new.
   vanished after eight seconds. The panel is permanent, turns amber below 50%
   retention, and shows per-sample missingness on demand. Because the loss is
   rarely uniform, it also names the single sample whose exclusion would recover
-  the most features — usually the actionable fix.
+  the most features — usually the actionable fix. It additionally compares the
+  **abundance of retained against discarded features**, with a density plot,
+  because the count alone cannot tell you whether the filter was benign:
+  dropout in label-free proteomics is intensity-dependent, so the surviving
+  proteome is usually not a random subsample.
 - **A downloadable session manifest** (audit OV-REP-04). Records the app version
   and release date, the timestamp, the input file's name, size and SHA-256, the
   detected comparisons, any upload warnings, and the R and package versions. It
   is equally explicit about what it cannot certify — the search engine,
   normalisation, imputation, statistical test, correction method, fold-change
-  base and per-module figure settings all happen outside the app. Claiming
-  provenance that does not exist would be worse than offering none.
+  base all happen outside the app. Claiming provenance that does not exist
+  would be worse than offering none.
+- **Per-module settings in the manifest.** Each module records what it was
+  actually last run with — the comparison, the cutoffs *and their inclusivity*,
+  PCA centring and scaling, the UMAP seed, retained and excluded feature
+  counts, the within-module p-adjustment method — so an exported figure can be
+  reconstructed. A module the user never opened registers nothing and is absent
+  from the manifest rather than reported at defaults it was never run with. The
+  git commit is recorded too when the app runs from a checkout; a Connect
+  deployment has no `.git`, and the manifest says so rather than printing
+  something misleading.
 - **`validation/competitive_null_calibration.R`**, quantifying how far the 1D
   enrichment p-values are from calibrated (audit OV-ENR-05). The module runs a
   *competitive* Wilcoxon rank-sum test, which assumes features vary

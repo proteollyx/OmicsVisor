@@ -143,8 +143,21 @@ mod_pathway_1D_ui <- function(id, title = "1D Enrichment") {
 # =========================
 # ===== Server ============ 
 # =========================
-mod_pathway_1D_server <- function(id) {
+mod_pathway_1D_server <- function(id, register = NULL) {
   moduleServer(id, function(input, output, session) {
+
+    observe({
+      ov_register_settings(register, "1D Enrichment", list(
+        test           = "competitive Wilcoxon rank-sum (set vs all other features)",
+        alternative    = input$alt,
+        p_adjustment   = input$adj,
+        FDR_cutoff     = input$fdr,
+        min_set_size   = input$minsz,
+        max_set_size   = input$maxsz,
+        calibration    = "p-values not calibrated under within-set correlation; see validation/competitive_null_calibration.md"
+      ))
+    })
+
     ns <- session$ns
     
     # ---- Utilities (local, no auto-install) ----

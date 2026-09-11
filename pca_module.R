@@ -154,8 +154,27 @@ pca_ui <- function(id) {
   )
 }
 
-pca_server <- function(id, data) {
+pca_server <- function(id, data, register = NULL) {
   moduleServer(id, function(input, output, session) {
+
+    observe({
+      # Retention is part of the record: a PCA of 400 features and one of
+      # 8,000 are different analyses even with identical settings.
+      dd  <- try(dr_data(), silent = TRUE)
+      ret <- if (inherits(dd, "try-error")) NULL else dd$retention
+      ov_register_settings(register, "PCA / UMAP", list(
+        method             = input$dr_method,
+        intensity_columns  = length(input$intensity_columns %||% character(0)),
+        pca_centred        = input$pca_center,
+        pca_scaled         = input$pca_scale,
+        umap_seed          = if (identical(input$dr_method, "UMAP")) input$umap_seed else NULL,
+        umap_n_neighbors   = if (identical(input$dr_method, "UMAP")) input$umap_n_neighbors else NULL,
+        umap_min_dist      = if (identical(input$dr_method, "UMAP")) input$umap_min_dist else NULL,
+        features_retained  = if (is.null(ret)) NULL else ret$n_complete,
+        features_excluded  = if (is.null(ret)) NULL else ret$n_dropped
+      ))
+    })
+
   ns <- session$ns
   
   # ---- Update intensity columns from main data reactive ----
@@ -428,6 +447,7 @@ pca_server <- function(id, data) {
     accent <- if (severe) "#8a4b00" else "#1E3791"
     bg     <- if (severe) "#FDF6EC" else "#F3F7FB"
 
+    ab_shift <- if (is.null(r$abundance)) NA_real_ else r$abundance$shift
     worst <- r$worst_sample
     advice <- if (!is.null(worst) && worst$recoverable > 0)
       tags$div(
@@ -459,6 +479,26 @@ pca_server <- function(id, data) {
         else NULL
       ),
       advice,
+
+      # Counting the loss is not the same as knowing whether it mattered.
+      if (!is.na(ab_shift)) tags$div(
+        style = "margin-top:6px;",
+        sprintf(
+          "Discarded features are %s in abundance than retained ones (median %.2f vs %.2f). %s",
+          if (ab_shift < 0) "lower" else "higher",
+          r$abundance$lost[["median"]], r$abundance$kept[["median"]],
+          if (abs(ab_shift) >= 0.5)
+            "Complete-case filtering has not removed a random subsample of the proteome."
+          else
+            "The two distributions are close, so the filter looks broadly unbiased.")) else NULL,
+
+      if (r$n_dropped > 0 && !is.na(ab_shift)) tags$details(
+        style = "margin-top:6px;",
+        tags$summary(style = "cursor:pointer; color:#1E3791;",
+                     "Abundance of retained vs discarded features"),
+        plotOutput(ns("retention_abundance"), height = "220px")
+      ) else NULL,
+
       if (r$n_dropped > 0) tags$details(
         style = "margin-top:6px;",
         tags$summary(style = "cursor:pointer; color:#1E3791;", "Missing values per sample"),
@@ -475,6 +515,40 @@ pca_server <- function(id, data) {
         )
       ) else NULL
     ))
+  })
+
+  # The distribution behind the one-line summary above. Intensity-dependent
+  # dropout shows up here as a discarded population sitting to the left of the
+  # retained one; a benign filter overlays the two.
+  output$retention_abundance <- renderPlot({
+    dd <- try(dr_data(), silent = TRUE)
+    if (inherits(dd, "try-error")) return(NULL)
+    r <- dd$retention
+    req(r$n_dropped > 0, any(is.finite(r$abundance$values)))
+
+    pdf_df <- data.frame(
+      abundance = r$abundance$values,
+      status    = ifelse(r$complete, "Retained", "Discarded"),
+      stringsAsFactors = FALSE
+    )
+    pdf_df <- pdf_df[is.finite(pdf_df$abundance), , drop = FALSE]
+    pdf_df$status <- factor(pdf_df$status, levels = c("Retained", "Discarded"))
+
+    ggplot(pdf_df, aes(x = abundance, fill = status, colour = status)) +
+      geom_density(alpha = 0.35, linewidth = 0.5, na.rm = TRUE) +
+      scale_fill_manual(values   = c(Retained = "#1E3791", Discarded = "#C2570A")) +
+      scale_colour_manual(values = c(Retained = "#1E3791", Discarded = "#C2570A")) +
+      labs(
+        x = "Mean intensity across selected samples (feature)",
+        y = "Density", fill = NULL, colour = NULL,
+        title = "What complete-case filtering removed",
+        subtitle = sprintf(
+          "%s retained, %s discarded \u2014 median shift %+.2f",
+          format(r$abundance$n_kept, big.mark = ","),
+          format(r$abundance$n_lost, big.mark = ","),
+          r$abundance$shift)) +
+      theme_minimal(base_size = 12) +
+      theme(legend.position = "top")
   })
 
   # ---- Colour scale ----

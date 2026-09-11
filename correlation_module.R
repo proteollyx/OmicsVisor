@@ -78,8 +78,21 @@ correlation_ui <- function(id) {
 }
 
 
-correlation_server <- function(id, data) {
+correlation_server <- function(id, data, register = NULL) {
   moduleServer(id, function(input, output, session) {
+
+    observe({
+      ov_register_settings(register, "Feature Correlation", list(
+        reference_feature = input$ref_feature,
+        method            = input$corr_method,
+        r_threshold       = input$r_threshold,
+        adj_p_threshold   = input$adjp_threshold,
+        p_adjustment      = "BH (within this module)",
+        boundaries        = "inclusive (|r| >= cutoff, adj.p <= cutoff)",
+        intensity_columns = length(input$intensity_columns %||% character(0))
+      ))
+    })
+
 
     # ── Populate inputs ────────────────────────────────────────────────────────
     observe({

@@ -338,6 +338,15 @@ server <- function(input, output, session) {
     df
   })
 
+  # Modules record the settings they were last run with here, so the session
+  # manifest can report what actually produced a figure rather than the
+  # defaults. A module the user never opened registers nothing and is simply
+  # absent from the manifest.
+  module_settings <- reactiveValues()
+  register_settings <- function(module, values) {
+    module_settings[[module]] <- values
+  }
+
   # One inspection, reported in full on the Data Overview tab
   upload_report <- reactive({
     req(input$upload_excel)
@@ -428,23 +437,24 @@ server <- function(input, output, session) {
 
   # Call modules
   data_overview_server("data_overview_module", data = data, report = upload_report,
-                       file_info = reactive(input$upload_excel))
+                       file_info = reactive(input$upload_excel),
+                       settings  = reactive(reactiveValuesToList(module_settings)))
   volcano_plot_server("volcano_module", data = data)
-  heatmap_server("heatmap_module", data = data)
+  heatmap_server("heatmap_module", data = data, register = register_settings)
   venndi_server("venndi_module")
-  volcano_printer_server("volcano_printer_module", data = data)
-  pca_server("pca_module", data = data)
+  volcano_printer_server("volcano_printer_module", data = data, register = register_settings)
+  pca_server("pca_module", data = data, register = register_settings)
   id_list_generator_server("id_list_generator_module", data = data)
   regex_tool_server("regex_tool_module")
   documentation_server("documentation_module")
   disclaimer_server("disclaimer_module")
-  donut_plot_server("donut_module", data = data)
+  donut_plot_server("donut_module", data = data, register = register_settings)
   plot_server("boxplot_module", data = data)
-  scatterplot_server("scatterplot_module", data = data)
+  scatterplot_server("scatterplot_module", data = data, register = register_settings)
   gct_export_server("gct_export_module", data = data)
-  mod_pathway_1D_server("1DE")
-  upset_plot_server("upset_plot_module", data = data)
-  correlation_server("correlation_module", data = data)
+  mod_pathway_1D_server("1DE", register = register_settings)
+  upset_plot_server("upset_plot_module", data = data, register = register_settings)
+  correlation_server("correlation_module", data = data, register = register_settings)
   about_server("about_module")
 }
 

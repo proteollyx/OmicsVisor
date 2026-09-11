@@ -597,6 +597,30 @@ ov_dr_retention <- function(mat) {
   worst <- if (nrow(per_sample) && max(per_sample$recoverable) > 0)
              per_sample[which.max(per_sample$recoverable), ] else NULL
 
+  # Whether the filter was benign. Dropout in label-free proteomics is
+  # intensity-dependent, so complete-case filtering preferentially removes
+  # low-abundance features and the retained set is not a random subsample.
+  # Counting how many were lost says nothing about that; comparing the
+  # abundance of what was kept against what was lost is the diagnostic that
+  # actually answers it (audit OV-STAT-10).
+  abundance <- rowMeans(mat, na.rm = TRUE)
+  abundance[!is.finite(abundance)] <- NA_real_
+  kept_ab <- abundance[complete]
+  lost_ab <- abundance[!complete]
+
+  q <- function(x) {
+    x <- x[is.finite(x)]
+    if (!length(x)) return(c(median = NA_real_, q1 = NA_real_, q3 = NA_real_))
+    stats::setNames(stats::quantile(x, c(0.5, 0.25, 0.75), names = FALSE),
+                    c("median", "q1", "q3"))
+  }
+  kept_q <- q(kept_ab); lost_q <- q(lost_ab)
+
+  # A shift worth mentioning, expressed on the data's own scale rather than
+  # as a p-value: a rank test on thousands of features calls everything
+  # significant and would tell the user nothing about magnitude.
+  shift <- unname(lost_q["median"] - kept_q["median"])
+
   list(
     n_in        = n_in,
     n_complete  = n_out,
@@ -604,7 +628,15 @@ ov_dr_retention <- function(mat) {
     pct_retained = if (n_in > 0) 100 * n_out / n_in else NA_real_,
     complete    = complete,
     per_sample  = per_sample[order(-per_sample$n_missing), , drop = FALSE],
-    worst_sample = worst
+    worst_sample = worst,
+    abundance   = list(
+      values      = abundance,
+      kept        = kept_q,
+      lost        = lost_q,
+      shift       = shift,
+      n_kept      = sum(is.finite(kept_ab)),
+      n_lost      = sum(is.finite(lost_ab))
+    )
   )
 }
 
@@ -622,8 +654,31 @@ ov_dr_retention <- function(mat) {
 # the statistical test; those happened upstream, and the numbers in the
 # workbook are taken entirely on trust. Saying so is the point.
 # ─────────────────────────────────────────────────────────
+# The commit is available when the app runs from a checkout; a Connect
+# deployment has no .git, and in that case the version and release date are
+# what pin the build. Better to say so than to print something misleading.
+ov_git_commit <- function() {
+  out <- tryCatch(
+    suppressWarnings(system2("git", c("rev-parse", "--short", "HEAD"),
+                             stdout = TRUE, stderr = FALSE)),
+    error = function(e) character(0))
+  if (length(out) == 1 && grepl("^[0-9a-f]{7,}$", out)) out
+  else "(not available; see version and release date)"
+}
+
+# Modules describe their own settings through this; the manifest renders
+# whatever has been registered. A module that the user never opened
+# registers nothing and is simply absent, rather than reported at defaults
+# it was never actually run with.
+ov_register_settings <- function(register, module, values) {
+  if (is.null(register) || !is.function(register)) return(invisible(NULL))
+  vals <- values[!vapply(values, is.null, logical(1))]
+  register(module, vals)
+  invisible(NULL)
+}
+
 ov_manifest <- function(file_name = NULL, file_path = NULL, report = NULL,
-                        int_regex = NULL) {
+                        int_regex = NULL, modules = NULL) {
 
   kv <- function(k, v) sprintf("  %-22s %s", paste0(k, ":"), v)
   na <- function(x) if (is.null(x) || !length(x) || is.na(x[1])) "(not recorded)" else x
@@ -652,6 +707,7 @@ ov_manifest <- function(file_name = NULL, file_path = NULL, report = NULL,
     "Software",
     kv("Version",      ov_version),
     kv("Release date", ov_release_date),
+    kv("Commit",       ov_git_commit()),
     kv("Generated",    format(Sys.time(), "%Y-%m-%d %H:%M:%S %Z")),
     "",
     "Input file",
@@ -680,6 +736,25 @@ ov_manifest <- function(file_name = NULL, file_path = NULL, report = NULL,
                paste0("  - ", report$warnings))
   }
 
+  # Whatever the user actually configured, module by module. This is the part
+  # that makes an exported figure reconstructible: the cutoffs and their
+  # inclusivity, the comparison, the seed, the adjustment method.
+  if (length(modules)) {
+    out <- c(out, "", "Module settings")
+    for (m in sort(names(modules))) {
+      vals <- modules[[m]]
+      if (!length(vals)) next
+      out <- c(out, sprintf("  %s", m))
+      for (k in names(vals)) {
+        v <- vals[[k]]
+        v <- if (is.null(v) || !length(v)) "(unset)"
+             else if (is.logical(v)) paste(ifelse(v, "yes", "no"), collapse = ", ")
+             else paste(format(v, trim = TRUE), collapse = ", ")
+        out <- c(out, sprintf("    %-20s %s", paste0(k, ":"), v))
+      }
+    }
+  }
+
   c(out,
     "",
     "Environment",
@@ -697,7 +772,6 @@ ov_manifest <- function(file_name = NULL, file_path = NULL, report = NULL,
     "  - the multiple-testing correction actually used",
     "  - the base of the fold changes (log2 is assumed and never verified)",
     "  - whether the comparison directions are labelled as intended",
-    "  - any per-module settings chosen for an individual figure",
     "",
     "  Record those from the upstream pipeline. This manifest fixes only",
     "  which file was loaded and which build of the app read it.",

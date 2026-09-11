@@ -164,3 +164,88 @@ test_that("the panel is quiet about recovery when the matrix is complete", {
     }
   )
 })
+
+
+# ── was the filter benign? (audit OV-STAT-10) ────────────────────────────────
+# Counting how many features were dropped says nothing about whether the
+# retained set is a random subsample. Dropout in label-free proteomics is
+# intensity-dependent, so it usually is not.
+
+test_that("abundance is summarised separately for retained and discarded", {
+  m <- matrix(rnorm(60, 20, 1), 20, 3, dimnames = list(NULL, c("S1","S2","S3")))
+  m[1:5, 2] <- NA
+  r <- ov_dr_retention(m)
+  expect_equal(r$abundance$n_kept, 15)
+  expect_equal(r$abundance$n_lost, 5)
+  expect_true(is.finite(r$abundance$kept[["median"]]))
+  expect_true(is.finite(r$abundance$lost[["median"]]))
+})
+
+test_that("intensity-dependent dropout shows up as a negative shift", {
+  # The case that matters: low-abundance features are the ones that go missing.
+  set.seed(7)
+  ab <- rnorm(400, 20, 3)
+  m  <- matrix(rep(ab, 4), ncol = 4, dimnames = list(NULL, paste0("S", 1:4)))
+  m  <- m + matrix(rnorm(1600, 0, 0.3), ncol = 4)
+  m[runif(400) < plogis(-(ab - 18)), 2] <- NA
+
+  r <- ov_dr_retention(m)
+  expect_lt(r$abundance$shift, -1)
+  expect_lt(r$abundance$lost[["median"]], r$abundance$kept[["median"]])
+})
+
+test_that("dropout unrelated to abundance leaves the distributions together", {
+  set.seed(8)
+  m <- matrix(rnorm(4000, 20, 3), 1000, 4, dimnames = list(NULL, paste0("S", 1:4)))
+  m[sample(1000, 200), 2] <- NA          # missing completely at random
+  r <- ov_dr_retention(m)
+  expect_lt(abs(r$abundance$shift), 0.5)
+})
+
+test_that("abundance summaries are NA rather than an error when nothing is dropped", {
+  m <- matrix(rnorm(30, 20, 1), 10, 3, dimnames = list(NULL, c("S1","S2","S3")))
+  r <- ov_dr_retention(m)
+  expect_equal(r$abundance$n_lost, 0)
+  expect_true(is.na(r$abundance$lost[["median"]]))
+  expect_true(is.na(r$abundance$shift))
+})
+
+test_that("the panel states the abundance shift and renders the distribution", {
+  set.seed(9)
+  df  <- sim_omics(n_features = 300, groups = list(WT = 3, KO = 3))
+  int <- grep("^Imputed", names(df), value = TRUE)
+  ab  <- rowMeans(df[, int])
+  df[ab < stats::quantile(ab, 0.3), int[1]] <- NA   # drop the dim ones
+
+  shiny::testServer(
+    pca_server,
+    args = list(data = reactive(list(data = df, intensity_cols = int))),
+    {
+      session$setInputs(dr_method = "PCA", intensity_columns = int,
+                        row_selection = "all", id_selection = "")
+      html <- as.character(output$dr_retention$html)
+      expect_match(html, "Discarded features are lower in abundance")
+      expect_match(html, "not removed a random subsample")
+      expect_match(html, "Abundance of retained vs discarded")
+      expect_no_error(output$retention_abundance)
+    }
+  )
+})
+
+test_that("the panel says so when the filter looks unbiased", {
+  set.seed(10)
+  df  <- sim_omics(n_features = 300, groups = list(WT = 3, KO = 3))
+  int <- grep("^Imputed", names(df), value = TRUE)
+  df[sample(nrow(df), 60), int[1]] <- NA            # missing at random
+
+  shiny::testServer(
+    pca_server,
+    args = list(data = reactive(list(data = df, intensity_cols = int))),
+    {
+      session$setInputs(dr_method = "PCA", intensity_columns = int,
+                        row_selection = "all", id_selection = "")
+      html <- as.character(output$dr_retention$html)
+      expect_match(html, "broadly unbiased")
+    }
+  )
+})

@@ -32,7 +32,8 @@ data_overview_ui <- function(id) {
   )
 }
 
-data_overview_server <- function(id, data, report = NULL, file_info = NULL) {
+data_overview_server <- function(id, data, report = NULL, file_info = NULL,
+                                 settings = NULL) {
   moduleServer(id, function(input, output, session) {
 
     # What was read, and anything worth knowing about it. Reported rather than
@@ -105,10 +106,12 @@ data_overview_server <- function(id, data, report = NULL, file_info = NULL) {
       filename = function()
         paste0("OmicsVisor_manifest_", format(Sys.time(), "%Y%m%d_%H%M%S"), ".txt"),
       content = function(file) {
-        r <- if (is.null(report)) NULL else tryCatch(report(), error = function(e) NULL)
+        r <- if (is.null(report))    NULL else tryCatch(report(),    error = function(e) NULL)
         f <- if (is.null(file_info)) NULL else tryCatch(file_info(), error = function(e) NULL)
+        m <- if (is.null(settings))  NULL else tryCatch(settings(),  error = function(e) NULL)
         writeLines(
-          ov_manifest(file_name = f$name, file_path = f$datapath, report = r),
+          ov_manifest(file_name = f$name, file_path = f$datapath, report = r,
+                      modules = m),
           file)
       }
     )

@@ -101,8 +101,20 @@ upset_plot_ui <- function(id) {
   )
 }
 
-upset_plot_server <- function(id, data) {
+upset_plot_server <- function(id, data, register = NULL) {
   moduleServer(id, function(input, output, session) {
+
+    observe({
+      ov_register_settings(register, "UpSet", list(
+        logFC_cutoff        = input$logfc_cutoff,
+        adj_P_cutoff        = input$adjp_cutoff,
+        boundaries          = "inclusive (|logFC| >= cutoff, adj.P <= cutoff)",
+        direction           = input$direction,
+        min_set_size        = input$min_set_size,
+        fold_change_only_ok = input$allow_fc_only
+      ))
+    })
+
   ns <- session$ns
 
   # --- Data access ----------------------------------------------------------

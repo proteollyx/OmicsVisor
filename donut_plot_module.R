@@ -27,8 +27,18 @@ donut_plot_ui <- function(id) {
   )
 }
 
-donut_plot_server <- function(id, data) {
+donut_plot_server <- function(id, data, register = NULL) {
   moduleServer(id, function(input, output, session) {
+
+    observe({
+      ov_register_settings(register, "Donut", list(
+        logFC_cutoff = input$logfc_cutoff,
+        adj_P_cutoff = input$pval_cutoff,
+        boundaries   = "inclusive (|logFC| >= cutoff, adj.P <= cutoff)",
+        cutoff_applied = input$apply_cutoff
+      ))
+    })
+
     ns <- session$ns
 
     # The donuts are drawn from a snapshot taken when "Apply Cutoff" is

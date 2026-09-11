@@ -54,8 +54,22 @@ volcano_printer_ui <- function(id) {
   )
 }
 
-volcano_printer_server <- function(id, data) {
+volcano_printer_server <- function(id, data, register = NULL) {
   moduleServer(id, function(input, output, session) {
+
+    # Recorded in the session manifest so an exported figure can be
+    # reconstructed: the comparison, the cutoffs, and - because it changed in
+    # v1.2.0 and shifts counts by a feature or two - their inclusivity.
+    observe({
+      ov_register_settings(register, "Volcano Printer", list(
+        comparison       = input$comparison_name,
+        logFC_cutoff     = input$logfc_cutoff,
+        adj_P_cutoff     = input$pval_cutoff,
+        boundaries       = "inclusive (|logFC| >= cutoff, adj.P <= cutoff)",
+        label_only_hits  = input$label_only_sig
+      ))
+    })
+
   ns <- session$ns
   
   # 1) Observe the data to detect all possible comparisons
