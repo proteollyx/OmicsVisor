@@ -956,3 +956,83 @@ ov_cluster_dist <- function(mat, method = "euclidean") {
     stats::dist(mat, method = method)
   }
 }
+
+
+# ─────────────────────────────────────────────────────────
+# Optional sample metadata (audit OV-UX-17 / 2.7)
+#
+# Grouping is derived by splitting intensity column names on "_" or ".",
+# which works for the standard in-house export and asks nothing of the user.
+# It is fragile for anything else: a sample called "Imputed.WT_rep1.2" does
+# not decompose the way the heuristic assumes.
+#
+# So the heuristic stays as the default, and an explicit table supersedes it
+# when supplied. Matching is by sample name against the intensity column
+# names, and it is deliberately strict about reporting what did not match -
+# a metadata file that silently applies to half the samples would be worse
+# than none, because the grouping would look deliberate.
+# ─────────────────────────────────────────────────────────
+ov_read_sample_metadata <- function(path, file_name = NULL, samples = NULL) {
+  ext <- tolower(tools::file_ext(file_name %||% path))
+  df <- if (ext %in% c("xlsx", "xls")) {
+    ov_read_upload(path, file_name %||% basename(path))
+  } else {
+    utils::read.delim(path, sep = if (ext == "csv") "," else "\t",
+                      stringsAsFactors = FALSE, check.names = FALSE)
+  }
+  if (!nrow(df)) stop("The sample metadata table is empty.", call. = FALSE)
+
+  names(df) <- trimws(names(df))
+  key <- grep("^sample$", names(df), ignore.case = TRUE)
+  if (!length(key))
+    stop("The sample metadata table needs a 'sample' column naming each intensity column.",
+         call. = FALSE)
+  names(df)[key[1]] <- "sample"
+  df$sample <- trimws(as.character(df$sample))
+
+  attrs <- setdiff(names(df), "sample")
+  if (!length(attrs))
+    stop("The sample metadata table has only a 'sample' column and no attributes.",
+         call. = FALSE)
+
+  warnings <- character(0)
+  if (anyDuplicated(df$sample)) {
+    dup <- unique(df$sample[duplicated(df$sample)])
+    warnings <- c(warnings, sprintf(
+      "Duplicate sample name(s) in the metadata: %s. The first row of each is used.",
+      paste(dup, collapse = ", ")))
+    df <- df[!duplicated(df$sample), , drop = FALSE]
+  }
+
+  matched <- unmatched <- extra <- character(0)
+  if (!is.null(samples)) {
+    matched   <- intersect(samples, df$sample)
+    unmatched <- setdiff(samples, df$sample)
+    extra     <- setdiff(df$sample, samples)
+    if (length(unmatched))
+      warnings <- c(warnings, sprintf(
+        "%d intensity column(s) have no metadata row and will fall back to the column name: %s.",
+        length(unmatched), paste(utils::head(unmatched, 5), collapse = ", ")))
+    if (length(extra))
+      warnings <- c(warnings, sprintf(
+        "%d metadata row(s) match no intensity column and are ignored: %s.",
+        length(extra), paste(utils::head(extra, 5), collapse = ", ")))
+  }
+
+  list(table = df, attributes = attrs, warnings = warnings,
+       matched = matched, unmatched = unmatched, extra = extra)
+}
+
+# Build the group label for each sample from the chosen metadata columns,
+# falling back to the sample's own name where no metadata row exists.
+ov_metadata_groups <- function(meta, samples, columns) {
+  columns <- intersect(columns, meta$attributes)
+  if (!length(columns)) return(NULL)
+  idx <- match(samples, meta$table$sample)
+  lab <- vapply(seq_along(samples), function(i) {
+    if (is.na(idx[i])) return(samples[i])
+    paste(vapply(columns, function(cl) as.character(meta$table[[cl]][idx[i]]),
+                 character(1)), collapse = "_")
+  }, character(1))
+  lab
+}

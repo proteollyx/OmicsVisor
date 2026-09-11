@@ -39,6 +39,16 @@ heatmap_ui <- function(id) {
                   multiple = TRUE),
       
       h4("Select Components for Grouping Annotation (order of clicking matters)"),
+      # Same override as the PCA module: an explicit table beats parsing
+      # column names, and the heuristic stays the default (audit OV-UX-17).
+      fileInput(ns("sample_metadata"),
+                "Sample metadata (optional: CSV, TSV or XLSX)",
+                accept = c(".csv", ".tsv", ".txt", ".xlsx")),
+      helpText(paste("Needs a 'sample' column matching the intensity column names.",
+                     "When supplied it replaces the component checkboxes below.")),
+      uiOutput(ns("metadata_status")),
+      uiOutput(ns("metadata_group_ui")),
+
       uiOutput(ns("grouping_checkboxes_ui")),
       verbatimTextOutput(ns("group_annotation_preview")),
       
@@ -93,6 +103,10 @@ heatmap_server <- function(id, data, register = NULL) {
         custom_colour_limits = input$use_custom_limits,
         distance          = input$dist_method,
         linkage           = input$linkage,
+        grouping          = if (is.null(input$sample_metadata))
+                              "parsed from intensity column names"
+                            else paste0("sample metadata file: ",
+                                        input$sample_metadata$name),
         colour_scale      = if (isTRUE(input$scale_rows))
                               "diverging, centred on the row mean"
                             else "sequential (no meaningful midpoint)"
@@ -165,7 +179,55 @@ heatmap_server <- function(id, data, register = NULL) {
   })
   
   # Build group annotations for columns based on selection order
+  sample_metadata <- reactive({
+    req(input$sample_metadata)
+    tryCatch(
+      ov_read_sample_metadata(input$sample_metadata$datapath,
+                              input$sample_metadata$name,
+                              samples = input$intensity_columns),
+      error = function(e) {
+        showNotification(paste("Sample metadata:", conditionMessage(e)),
+                         type = "error", duration = 14)
+        NULL
+      }
+    )
+  })
+
+  output$metadata_status <- renderUI({
+    if (is.null(input$sample_metadata)) return(NULL)
+    m <- sample_metadata()
+    if (is.null(m)) return(NULL)
+    n_ok <- length(m$matched)
+    n_all <- length(input$intensity_columns %||% character(0))
+    tone <- if (n_ok == n_all) "#18682a" else "#8a4b00"
+    tagList(div(
+      style = sprintf(paste("border-left:3px solid %s; background:#F7F9FB;",
+                            "padding:6px 10px; margin:4px 0 8px 0; font-size:0.88em;"), tone),
+      tags$div(style = sprintf("color:%s; font-weight:600;", tone),
+               sprintf("%d of %d samples matched", n_ok, n_all)),
+      if (length(m$warnings))
+        tags$ul(style = "margin:4px 0 0 0; padding-left:16px; color:#8a4b00;",
+                lapply(m$warnings, tags$li)) else NULL
+    ))
+  })
+
+  output$metadata_group_ui <- renderUI({
+    if (is.null(input$sample_metadata)) return(NULL)
+    m <- sample_metadata()
+    if (is.null(m)) return(NULL)
+    selectInput(ns("metadata_group_cols"), "Annotate samples by:",
+                choices = m$attributes, selected = m$attributes[1],
+                multiple = TRUE)
+  })
+
   group_annotations <- reactive({
+    m <- if (is.null(input$sample_metadata)) NULL else sample_metadata()
+    if (!is.null(m)) {
+      cols <- input$metadata_group_cols %||% m$attributes[1]
+      g <- ov_metadata_groups(m, input$intensity_columns, cols)
+      if (!is.null(g)) return(g)
+    }
+
     co <- component_order()
     if (length(co) == 0) return(NULL)
     

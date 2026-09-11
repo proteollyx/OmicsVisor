@@ -9,6 +9,86 @@ must always match it (enforced by `tests/testthat/test-version.R`).
 
 ---
 
+## [1.4.0] - 2026-09-11
+
+**Release C of the September 2026 independent quality audit remediation**, and
+the last of the three. Every item the response to the audit left open is now
+closed.
+
+> **Behaviour change.** **PCA no longer scales features to unit variance by
+> default.** A saved workflow re-run after upgrading will produce a different
+> PCA unless "Scale data" is re-ticked. The audit's argument for this is sound —
+> autoscaling gives a protein with negligible dynamic range the same weight as a
+> highly variable one, and for already-normalised log intensities centring alone
+> is the better default, which is also what `prcomp()` itself does. The response
+> to the audit made the change conditional on a release note and a visible
+> indication of which setting produced a plot; both are now in place. The PCA
+> subtitle states centring, scaling and feature count, and the manifest records
+> all three.
+
+### Fixed
+- **GCT 1.3 files with column metadata were parsed wrongly** (audit OV-ENR-12).
+  In GCT 1.3 the column-metadata rows sit between the column header and the
+  data; the reader took the data first. Any 1.3 file that used column metadata —
+  which is the point of 1.3 over 1.2 — had those metadata rows parsed as
+  features, named after the metadata fields and carrying no numbers, while an
+  equal number of real features fell off the end. Because non-finite scores are
+  filtered downstream the phantom features simply vanished, so on a large file
+  the loss was nearly invisible. Two further defects surfaced while building the
+  fixtures: the 1.2 branch was selected by exact string comparison, so a version
+  line padded with trailing tabs (which real writers emit) went down the 1.3
+  branch and failed; and `strsplit()` discards trailing empty fields, so a blank
+  final sample name was reported as a dimension mismatch rather than the blank
+  it is.
+
+### Added
+- **GCT conformance fixtures** covering the audit's full list, and `ov_read_gct()`
+  extracted from the module so it can be tested at all. It now checks declared
+  dimensions against what is present rather than trusting them, and reports
+  duplicate row IDs, duplicate and blank sample names and non-numeric cells.
+- **Optional sample-metadata table** for PCA, UMAP and the heatmap (audit
+  OV-UX-17). A CSV, TSV or XLSX with a `sample` column and any attributes
+  (condition, batch, replicate) supersedes filename parsing when supplied; the
+  heuristic remains the default because it asks nothing of the user and works
+  for the standard export. Which samples matched is reported prominently —
+  metadata that silently applied to only some samples would be worse than none,
+  because the grouping would still look deliberate.
+- **User-selectable distance and linkage** for heatmap clustering, recorded in
+  the manifest (audit 2.9). Both change the dendrogram and therefore which
+  groups a reader believes cluster together. Correlation distances are offered
+  alongside metric ones, with zero-variance features treated as maximally
+  distant rather than poisoning the distance matrix with `NA`.
+- **A locked-environment CI job** (audit OV-REP-14) restoring `renv.lock` at the
+  pinned R 4.6.0, so exact reproducibility is tested alongside forward
+  compatibility. It verifies every restored package matches the lockfile before
+  running the suite.
+- **An HYE124 sign-convention oracle** (response section 3.7). Known species
+  ratios — human 1:1, yeast 2:1, E. coli 1:4 — pin fold-change signs and axis
+  directions end to end, and confirm `swapFC()` inverts the biology as well as
+  the numbers. Deliberately not used for quantitative accuracy, which would test
+  the upstream pipeline rather than this tool.
+
+### Changed
+- **Heatmap colour follows the data's meaning** (audit 2.9). A diverging palette
+  asserts that its midpoint means something: true for row z-scores, where zero
+  is the row mean, false for raw log intensities, where white lands wherever the
+  selected samples happen to centre — so the same protein changed colour
+  depending on which samples were on screen. Unscaled data now gets a sequential
+  palette.
+- **The Okabe-Ito palette is labelled honestly.** It is colourblind-safe because
+  of the specific eight colours it contains; interpolating past eight keeps
+  plots from failing but produces colours the palette never claimed to
+  distinguish. The interface now says so when the group count exceeds capacity.
+- **Bubble size in 1D Enrichment relabelled** from "Overlap (%)" to "Set
+  coverage (%)", stating that it is measured members over original GMT members.
+  A small bubble is the warning that a result rests on a fraction of the set
+  rather than the pathway as annotated.
+- **The gene-set database is recorded** in the manifest by filename, SHA-256 and
+  set count, since MSigDB sets change between releases and the set name alone
+  does not identify what was tested.
+
+---
+
 ## [1.3.0] - 2026-09-10
 
 **Release B of the September 2026 independent quality audit remediation.**

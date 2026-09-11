@@ -49,6 +49,19 @@ pca_ui <- function(id) {
       
       # ---- Grouping annotation controls ----
       h4("Select Components for Grouping Annotation"),
+      # An explicit table supersedes filename parsing when supplied; the
+      # heuristic stays the default because it asks nothing of the user and
+      # works for the standard export (audit OV-UX-17).
+      fileInput(ns("sample_metadata"),
+                "Sample metadata (optional: CSV, TSV or XLSX)",
+                accept = c(".csv", ".tsv", ".txt", ".xlsx")),
+      helpText(paste("Needs a 'sample' column matching the intensity column names,",
+                     "plus any attributes you want to group by (condition, batch,",
+                     "replicate). When supplied it replaces the component checkboxes",
+                     "below.")),
+      uiOutput(ns("metadata_status")),
+      uiOutput(ns("metadata_group_ui")),
+
       uiOutput(ns("grouping_checkboxes_ui")),  # Dynamically generated checkboxes for grouping selection
       verbatimTextOutput(ns("group_annotation_preview")),  # Display resulting group names
       
@@ -184,7 +197,13 @@ pca_server <- function(id, data, register = NULL) {
         umap_min_dist      = if (identical(input$dr_method, "UMAP")) input$umap_min_dist else NULL,
         features_retained  = if (is.null(ret)) NULL else ret$n_complete,
         features_excluded  = if (is.null(ret)) NULL else ret$n_dropped,
-        colour_palette     = input$color_scheme
+        colour_palette     = input$color_scheme,
+        grouping           = if (is.null(input$sample_metadata))
+                               "parsed from intensity column names"
+                             else paste0("sample metadata file: ",
+                                         input$sample_metadata$name),
+        grouped_by         = if (is.null(input$sample_metadata)) NULL
+                             else input$metadata_group_cols
       ))
     })
 
@@ -232,8 +251,61 @@ pca_server <- function(id, data, register = NULL) {
     )
   })
   
-  # Generate group annotations based on selected components
+  # ---- Optional explicit sample metadata ----
+  sample_metadata <- reactive({
+    req(input$sample_metadata)
+    tryCatch(
+      ov_read_sample_metadata(input$sample_metadata$datapath,
+                              input$sample_metadata$name,
+                              samples = input$intensity_columns),
+      error = function(e) {
+        showNotification(paste("Sample metadata:", conditionMessage(e)),
+                         type = "error", duration = 14)
+        NULL
+      }
+    )
+  })
+
+  # What matched and what did not. A metadata file that silently applies to
+  # half the samples would be worse than none, because the grouping would
+  # still look deliberate.
+  output$metadata_status <- renderUI({
+    if (is.null(input$sample_metadata)) return(NULL)
+    m <- sample_metadata()
+    if (is.null(m)) return(NULL)
+    n_ok <- length(m$matched)
+    n_all <- length(input$intensity_columns %||% character(0))
+    tone <- if (n_ok == n_all) "#18682a" else "#8a4b00"
+    tagList(div(
+      style = sprintf(paste("border-left:3px solid %s; background:#F7F9FB;",
+                            "padding:6px 10px; margin:4px 0 8px 0; font-size:0.88em;"), tone),
+      tags$div(style = sprintf("color:%s; font-weight:600;", tone),
+               sprintf("%d of %d samples matched", n_ok, n_all)),
+      if (length(m$warnings))
+        tags$ul(style = "margin:4px 0 0 0; padding-left:16px; color:#8a4b00;",
+                lapply(m$warnings, tags$li)) else NULL
+    ))
+  })
+
+  output$metadata_group_ui <- renderUI({
+    if (is.null(input$sample_metadata)) return(NULL)
+    m <- sample_metadata()
+    if (is.null(m)) return(NULL)
+    selectInput(ns("metadata_group_cols"), "Group samples by:",
+                choices = m$attributes,
+                selected = m$attributes[1], multiple = TRUE)
+  })
+
+  # Generate group annotations: explicit metadata wins, filename parsing is
+  # the fallback.
   group_annotations <- reactive({
+    m <- if (is.null(input$sample_metadata)) NULL else sample_metadata()
+    if (!is.null(m)) {
+      cols <- input$metadata_group_cols %||% m$attributes[1]
+      g <- ov_metadata_groups(m, input$intensity_columns, cols)
+      if (!is.null(g)) return(g)
+    }
+
     components <- split_components()
     selected_groups <- lapply(seq_len(ncol(components)), function(i) {
       if (isTRUE(input[[paste0("group_component_", i)]])) components[, i] else NULL
